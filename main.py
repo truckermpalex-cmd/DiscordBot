@@ -76,22 +76,7 @@ def load_rank_message():
 def save_rank_message(data: dict):
     with open(RANK_MESSAGE_FILE, "w") as f:
         json.dump(data, f)
-
-
-def load_promotion_order() -> dict:
-    try:
-        with open(RANK_PROMOTION_FILE, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
-
-def save_promotion_order(data: dict):
-    with open(RANK_PROMOTION_FILE, "w") as f:
-        json.dump(data, f)
-
-
-
+        
 def build_rank_embed(guild: discord.Guild) -> discord.Embed:
 
     embed = discord.Embed(
@@ -120,11 +105,9 @@ def build_rank_embed(guild: discord.Guild) -> discord.Embed:
                     matched_name = role.name
                     break
 
-            if not role:
-                members = []
+            members = []
 
-            else:
-                # Sort members by join date
+            if role:
                 sorted_members = sorted(
                     role.members,
                     key=lambda m: m.joined_at or discord.utils.utcnow()
@@ -143,7 +126,6 @@ def build_rank_embed(guild: discord.Guild) -> discord.Embed:
     )
 
     return embed
-
 
 async def update_member_tag(member: discord.Member):
     # Find the tag for their highest rank role
@@ -514,49 +496,12 @@ async def on_ready():
 
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
+
     if before.roles == after.roles:
         return
 
-    all_rank_role_names = {
-        rn
-        for _display, role_names, _tag in ALL_RANKS
-        for rn in role_names
-    }
-
-    before_rank_roles = {
-        r.name for r in before.roles
-        if r.name in all_rank_role_names
-    }
-
-    after_rank_roles = {
-        r.name for r in after.roles
-        if r.name in all_rank_role_names
-    }
-
-    removed_roles = before_rank_roles - after_rank_roles
-    added_roles = after_rank_roles - before_rank_roles
-
-    uid = str(after.id)
-    changed = False
-
-    # Remove user from old rank lists
-    for role_name in removed_roles:
-        if uid in promo_data.get(role_name, []):
-            promo_data[role_name].remove(uid)
-            changed = True
-
-    # Add user to new rank lists
-    for role_name in added_roles:
-        order = promo_data.setdefault(role_name, [])
-
-        if uid not in order:
-            order.append(uid)
-            changed = True
-
-    if changed:
     await update_member_tag(after)
 
-    # Small delay to let Discord cache update
     await asyncio.sleep(1)
 
     await update_rank_board(after.guild)
@@ -880,19 +825,17 @@ async def promote(
 
     if not target_role:
         return await interaction.response.send_message(
-            f"❌ Role for **{rank.name}** not found in this server.",
+            f"❌ Role for **{rank.name}** not found.",
             ephemeral=True
         )
 
     await clear_rank_roles(member)
 
-    await asyncio.sleep(0.5)
-
     await member.add_roles(target_role)
 
-    await asyncio.sleep(1)
-
     await update_member_tag(member)
+
+    await asyncio.sleep(1)
 
     await update_rank_board(interaction.guild)
 
@@ -904,27 +847,39 @@ async def promote(
 @bot.tree.command(name="demote", description="Demote a member to a selected rank", guild=GUILD)
 @app_commands.describe(member="Member to demote", rank="Rank to demote to")
 @app_commands.choices(rank=RANK_CHOICES)
-async def demote(interaction: discord.Interaction, member: discord.Member, rank: app_commands.Choice[str]):
-    if not high_command_check(interaction.user):
-        return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-    target_role = get_rank_role(interaction.guild, rank.value)
-    if not target_role:
-        return await interaction.response.send_message(f"❌ Role for **{rank.name}** not found in this server.", ephemeral=True)
-    await clear_rank_roles(member)
+async def demote(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    rank: app_commands.Choice[str]
+):
 
-    await asyncio.sleep(0.5)
+    if not high_command_check(interaction.user):
+        return await interaction.response.send_message(
+            "❌ No permission.",
+            ephemeral=True
+        )
+
+    target_role = get_rank_role(interaction.guild, rank.value)
+
+    if not target_role:
+        return await interaction.response.send_message(
+            f"❌ Role for **{rank.name}** not found.",
+            ephemeral=True
+        )
+
+    await clear_rank_roles(member)
 
     await member.add_roles(target_role)
 
-    await asyncio.sleep(1)
-
     await update_member_tag(member)
+
+    await asyncio.sleep(1)
 
     await update_rank_board(interaction.guild)
 
     await interaction.response.send_message(
-    f"⬇️ {member.mention} has been demoted to **{rank.name}** by {interaction.user.mention}."
-)
+        f"⬇️ {member.mention} has been demoted to **{rank.name}** by {interaction.user.mention}."
+    )
 
 
 @bot.tree.command(name="fire", description="Remove a member from HRT", guild=GUILD)
