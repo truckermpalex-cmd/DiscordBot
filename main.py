@@ -33,7 +33,6 @@ RANK_SECTIONS = [
     ("🔺 HIGH COMMAND", [
         ("Chief Commander", ["🎖 Chief Commander"], "[HC]"),
         ("Deputy Commander", ["🎖 Deputy Commander"], "[HC]"),
-        ("Internal Affairs", ["🕵 Internal Affairs"], "[IA]"),
     ]),
     ("👮 LOW COMMAND", [
         ("Captain", ["👮 Captain"], "[LC]"),
@@ -63,7 +62,7 @@ ALL_RANKS = [
 ROLE_TO_TAG = {rn: tag for _, role_names, tag in ALL_RANKS for rn in role_names}
 
 # All known tags (for stripping old ones from nicknames)
-ALL_TAGS = ["[HC]", "[IA]", "[LC]", "[SV]", "[HRT]", "[CADET]"]
+ALL_TAGS = ["[HC]", "[LC]", "[SV]", "[HRT]", "[CADET]"]
 
 # =========================================================
 # RANK HIERARCHY
@@ -78,9 +77,8 @@ RANK_HIERARCHY = {
     "Sergeant": 5,
     "Lieutenant": 6,
     "Captain": 7,
-    "Internal Affairs": 8,
-    "Deputy Commander": 9,
-    "Chief Commander": 10,
+    "Deputy Commander": 8,
+    "Chief Commander": 9,
 }
 
 
@@ -897,7 +895,6 @@ async def clear_rank_roles(member: discord.Member):
 RANK_CHOICES = [
     app_commands.Choice(name="🎖 Chief Commander",        value="Chief Commander"),
     app_commands.Choice(name="🎖 Deputy Commander",       value="Deputy Commander"),
-    app_commands.Choice(name="🕵 Internal Affairs",       value="Internal Affairs"),
     app_commands.Choice(name="👮 Captain",                value="Captain"),
     app_commands.Choice(name="👮 Lieutenant",             value="Lieutenant"),
     app_commands.Choice(name="👮 Sergeant",               value="Sergeant"),
