@@ -13,7 +13,8 @@ RECRUITMENT_CATEGORY_NAME = "📋 RECRUITMENT DIVISION"
 ACTIVE_APPS_CATEGORY_NAME = "📥 ACTIVE APPLICATIONS"
 OLD_APPS_CATEGORY_NAME = "🗂 OLD APPLICATIONS"
 APPLICATIONS_CHANNEL_NAME = "📥│applications"
-RANK_MESSAGE_FILE = "bot/rank_message.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+RANK_MESSAGE_FILE = os.path.join(BASE_DIR, "rank_message.json")
 RANK_PROMOTION_FILE = "bot/rank_promotion_order.json"
 OLD_TICKETS_CATEGORY_NAME = "🗂 OLD TICKETS"
 GENERAL_CHAT_NAME = "💬│general-chat"
@@ -318,10 +319,12 @@ class ApplicationDecisionView(discord.ui.View):
         """Fetch the applicant from the channel topic (survives bot restarts)."""
         if self.applicant:
             return self.applicant
-        topic = interaction.channel.topic
-        if topic and topic.isdigit():
+        topic = interaction.channel.topic or ""
+        uid = topic.split(" | ")[0]
+
+        if uid.isdigit():
             try:
-                return await interaction.guild.fetch_member(int(topic))
+                return await interaction.guild.fetch_member(int(uid))
             except (discord.NotFound, discord.HTTPException):
                 return None
         return None
@@ -911,11 +914,30 @@ def get_rank_role(guild: discord.Guild, display_name: str):
 
 
 async def clear_rank_roles(member: discord.Member):
-    """Remove all tracked rank roles from a member."""
+    """Remove ONLY rank roles from a member."""
     to_remove = [r for r in member.roles if r.name in ROLE_TO_TAG]
+
     if to_remove:
         await member.remove_roles(*to_remove)
 
+
+async def clear_all_hrt_roles(member: discord.Member):
+    """Remove rank roles + staff/division roles."""
+
+    extra_roles = [
+        "🎫 Support Team",
+        "🎓 Training Officer",
+        "📋 Recruiter",
+        "🕵 Internal Affairs",
+    ]
+
+    to_remove = [
+        r for r in member.roles
+        if r.name in ROLE_TO_TAG or r.name in extra_roles
+    ]
+
+    if to_remove:
+        await member.remove_roles(*to_remove)
 
 RANK_CHOICES = [
     app_commands.Choice(name="🎖 Chief Commander",        value="Chief Commander"),
@@ -1071,7 +1093,7 @@ async def demote(interaction: discord.Interaction, member: discord.Member, rank:
 async def fire(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not high_command_check(interaction.user):
         return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-    await clear_rank_roles(member)
+    await clear_all_hrt_roles(member)
     await update_member_tag(member)
     embed = discord.Embed(
         title="🚫 Member Terminated",
@@ -1094,7 +1116,7 @@ async def fire(interaction: discord.Interaction, member: discord.Member, reason:
 async def retire(interaction: discord.Interaction, member: discord.Member):
     if not high_command_check(interaction.user):
         return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-    await clear_rank_roles(member)
+    await clear_all_hrt_roles(member)
     retired_role = discord.utils.get(interaction.guild.roles, name="🎖 Retired")
     if retired_role:
         await member.add_roles(retired_role)
