@@ -889,7 +889,10 @@ async def clear_rank_roles(member: discord.Member):
     """Remove all tracked rank roles from a member."""
     to_remove = [r for r in member.roles if r.name in ROLE_TO_TAG]
     if to_remove:
-        await member.remove_roles(*to_remove)
+    try:
+    await member.remove_roles(*to_remove)
+except discord.Forbidden:
+    pass
 
 
 RANK_CHOICES = [
