@@ -851,7 +851,11 @@ RANK_CHOICES = [
 @bot.tree.command(name="promote", description="Promote a member to a selected rank", guild=GUILD)
 @app_commands.describe(member="Member to promote", rank="Rank to promote to")
 @app_commands.choices(rank=RANK_CHOICES)
-async def promote(interaction: discord.Interaction, member: discord.Member, rank: app_commands.Choice[str]):
+async def promote(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    rank: app_commands.Choice[str]
+):
 
     if not high_command_check(interaction.user):
         return await interaction.response.send_message(
@@ -884,30 +888,6 @@ async def promote(interaction: discord.Interaction, member: discord.Member, rank
     )
 
 
-@bot.tree.command(name="promote", description="Promote a member to a selected rank", guild=GUILD)
-@app_commands.describe(member="Member to promote", rank="Rank to promote to")
-@app_commands.choices(rank=RANK_CHOICES)
-async def promote(interaction: discord.Interaction, member: discord.Member, rank: app_commands.Choice[str]):
-    if not high_command_check(interaction.user):
-        return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-    target_role = get_rank_role(interaction.guild, rank.value)
-    if not target_role:
-        return await interaction.response.send_message(f"❌ Role for **{rank.name}** not found in this server.", ephemeral=True)
-    await clear_rank_roles(member)
-
-    await asyncio.sleep(0.5)
-
-    await member.add_roles(target_role)
-
-    await asyncio.sleep(1)
-
-    await update_member_tag(member)
-
-    await update_rank_board(interaction.guild)
-        f"⬆️ {member.mention} has been promoted to **{rank.name}** by {interaction.user.mention}."
-    )
-
-
 @bot.tree.command(name="demote", description="Demote a member to a selected rank", guild=GUILD)
 @app_commands.describe(member="Member to demote", rank="Rank to demote to")
 @app_commands.choices(rank=RANK_CHOICES)
@@ -928,8 +908,10 @@ async def demote(interaction: discord.Interaction, member: discord.Member, rank:
     await update_member_tag(member)
 
     await update_rank_board(interaction.guild)
-        f"⬇️ {member.mention} has been demoted to **{rank.name}** by {interaction.user.mention}."
-    )
+
+    await interaction.response.send_message(
+    f"⬇️ {member.mention} has been demoted to **{rank.name}** by {interaction.user.mention}."
+)
 
 
 @bot.tree.command(name="fire", description="Remove a member from HRT", guild=GUILD)
