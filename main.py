@@ -1575,8 +1575,14 @@ def save_disciplinary_log(data):
 def load_pending_cases():
     try:
         with open(PENDING_CASES_FILE, "r") as f:
-            return json.load(f)
-    except:
+            data = json.load(f)
+
+            if not isinstance(data, dict):
+                return {}
+
+            return data
+
+    except Exception:
         return {}
 
 
