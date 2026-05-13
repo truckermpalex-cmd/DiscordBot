@@ -176,13 +176,15 @@ async def update_rank_board(guild: discord.Guild):
         print("[DEBUG] No saved rank board.")
         return
 
-    channel = guild.get_channel(int(channel_id))
-
-    if not channel:
-        print("[DEBUG] Channel not found.")
-        return
-
     try:
+        # FETCH channel instead of cache lookup
+        channel = await bot.fetch_channel(int(channel_id))
+
+        if not channel:
+            print("[DEBUG] Channel not found.")
+            return
+
+        # FETCH message directly
         message = await channel.fetch_message(int(message_id))
 
         print("[DEBUG] Found rank board message.")
@@ -488,18 +490,21 @@ class ApplyButtonView(discord.ui.View):
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
 
+    print(f"[DEBUG] Member update triggered for {after}")
+
     before_role_ids = {r.id for r in before.roles}
     after_role_ids = {r.id for r in after.roles}
 
     if before_role_ids == after_role_ids:
         return
 
+    print("[DEBUG] Roles changed.")
+
     await update_member_tag(after)
 
     await asyncio.sleep(1)
 
     await update_rank_board(after.guild)
-
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
