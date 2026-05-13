@@ -14,7 +14,6 @@ ACTIVE_APPS_CATEGORY_NAME = "📥 ACTIVE APPLICATIONS"
 OLD_APPS_CATEGORY_NAME = "🗂 OLD APPLICATIONS"
 APPLICATIONS_CHANNEL_NAME = "📥│applications"
 RANK_MESSAGE_FILE = "bot/rank_message.json"
-RANK_PROMOTION_FILE = "bot/rank_promotion_order.json"
 OLD_TICKETS_CATEGORY_NAME = "🗂 OLD TICKETS"
 GENERAL_CHAT_NAME = "💬│general-chat"
 RECRUITMENT_MESSAGE_FILE = "bot/recruitment_message.json"
@@ -94,37 +93,55 @@ def save_promotion_order(data: dict):
 
 
 def build_rank_embed(guild: discord.Guild) -> discord.Embed:
+
     embed = discord.Embed(
         title="📊 HRT — RANK STRUCTURE",
         description="Live roster showing all members by rank. Updates automatically on promotions and demotions.",
         color=discord.Color.dark_blue()
     )
-    promo_data = load_promotion_order()
+
     for section_name, ranks in RANK_SECTIONS:
-        # Section divider
-        embed.add_field(name=f"━━━━━━ {section_name} ━━━━━━", value="\u200b", inline=False)
+
+        embed.add_field(
+            name=f"━━━━━━ {section_name} ━━━━━━",
+            value="\u200b",
+            inline=False
+        )
+
         for display_name, role_names, _tag in ranks:
+
             role = None
             matched_name = display_name
+
             for role_name in role_names:
                 role = discord.utils.get(guild.roles, name=role_name)
-                if role is not None:
-                    matched_name = role_name
+
+                if role:
+                    matched_name = role.name
                     break
-            if role is None:
+
+            if not role:
                 members = []
+
             else:
-                role_members = {str(m.id): m for m in role.members}
-                ordered_ids = promo_data.get(matched_name, [])
-                untracked = [m for m in role.members if str(m.id) not in ordered_ids]
-                tracked = [role_members[uid] for uid in ordered_ids if uid in role_members]
-                members = [m.mention for m in untracked + tracked]
+                # Sort members by join date
+                sorted_members = sorted(
+                    role.members,
+                    key=lambda m: m.joined_at or discord.utils.utcnow()
+                )
+
+                members = [m.mention for m in sorted_members]
+
             embed.add_field(
                 name=f"{matched_name} ({len(members)})",
                 value="\n".join(members) if members else "*None*",
                 inline=False
             )
-    embed.set_footer(text="HRT • Auto-updates on rank changes")
+
+    embed.set_footer(
+        text="HRT • Auto-updates on rank changes"
+    )
+
     return embed
 
 
@@ -506,8 +523,6 @@ async def on_member_update(before: discord.Member, after: discord.Member):
         for rn in role_names
     }
 
-    promo_data = load_promotion_order()
-
     before_rank_roles = {
         r.name for r in before.roles
         if r.name in all_rank_role_names
@@ -539,8 +554,6 @@ async def on_member_update(before: discord.Member, after: discord.Member):
             changed = True
 
     if changed:
-        save_promotion_order(promo_data)
-
     await update_member_tag(after)
 
     # Small delay to let Discord cache update
