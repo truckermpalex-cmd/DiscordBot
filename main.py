@@ -157,34 +157,34 @@ async def update_member_tag(member: discord.Member):
 
 
 async def update_rank_board(guild: discord.Guild):
+
     data = load_rank_message()
+
+    print(f"[DEBUG] Rank message data: {data}")
 
     channel_id = data.get("channel_id")
     message_id = data.get("message_id")
 
     if not channel_id or not message_id:
+        print("[DEBUG] No saved rank board.")
         return
 
     channel = guild.get_channel(int(channel_id))
 
     if not channel:
-        print("[RANK BOARD] Channel not found.")
+        print("[DEBUG] Channel not found.")
         return
 
     try:
         message = await channel.fetch_message(int(message_id))
 
-        await message.edit(
-            embed=build_rank_embed(guild)
-        )
+        print("[DEBUG] Found rank board message.")
 
-        print("[RANK BOARD] Successfully updated.")
+        new_embed = build_rank_embed(guild)
 
-    except discord.NotFound:
-        print("[RANK BOARD] Message deleted manually.")
+        await message.edit(embed=new_embed)
 
-    except discord.Forbidden:
-        print("[RANK BOARD] Missing permissions.")
+        print("[DEBUG] Rank board updated successfully.")
 
     except Exception as e:
         print(f"[RANK BOARD ERROR] {e}")
