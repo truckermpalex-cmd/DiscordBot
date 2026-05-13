@@ -486,30 +486,13 @@ class ApplyButtonView(discord.ui.View):
 
 
 @bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user}")
-    try:
-        bot.add_view(ApplyButtonView())
-        bot.add_view(ApplicationDecisionView(None))
-        bot.add_view(VerifyButtonView())
-        bot.add_view(SupportTicketView())
-        bot.add_view(TicketCloseView())
-        synced = await bot.tree.sync(guild=GUILD)
-        print(f"Synced {len(synced)} slash commands to guild.")
-        await update_rank_board(bot.get_guild(GUILD_ID))
-        print("[STARTUP] Rank board refreshed.")
-    except Exception as e:
-        print(e)
-
-
-@bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
 
     before_role_ids = {r.id for r in before.roles}
-after_role_ids = {r.id for r in after.roles}
+    after_role_ids = {r.id for r in after.roles}
 
-if before_role_ids == after_role_ids:
-    return
+    if before_role_ids == after_role_ids:
+        return
 
     await update_member_tag(after)
 
@@ -517,6 +500,29 @@ if before_role_ids == after_role_ids:
 
     await update_rank_board(after.guild)
 
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+    try:
+        bot.add_view(ApplyButtonView())
+        bot.add_view(ApplicationDecisionView(None))
+        bot.add_view(VerifyButtonView())
+        bot.add_view(SupportTicketView())
+        bot.add_view(TicketCloseView())
+
+        synced = await bot.tree.sync(guild=GUILD)
+
+        print(f"Synced {len(synced)} slash commands to guild.")
+
+        guild = bot.get_guild(GUILD_ID)
+
+        if guild:
+            await update_rank_board(guild)
+            print("[STARTUP] Rank board refreshed.")
+
+    except Exception as e:
+        print(f"[READY ERROR] {e}")
 
 # =========================================================
 # SLASH COMMANDS
@@ -1618,4 +1624,5 @@ async def main():
     async with bot:
         await bot.start(TOKEN)
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
