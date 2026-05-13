@@ -31,9 +31,9 @@ ALL_ACTIVE_TICKET_CATEGORIES = list(TICKET_TYPE_CATEGORIES.values())
 
 RANK_SECTIONS = [
     ("🔺 HIGH COMMAND", [
-        ("Chief Commander", ["🛡 Chief Commander", "🎖 Chief Commander"], "[HC]"),
-        ("Deputy Commander", ["⭐ Deputy Commander", "🎖 Deputy Commander"], "[HC]"),
-        ("Internal Affairs", ["🕵 Internal Affairs"], "[HC]"),
+        ("Chief Commander", ["🎖 Chief Commander"], "[HC]"),
+        ("Deputy Commander", ["🎖 Deputy Commander"], "[HC]"),
+        ("Internal Affairs", ["🕵 Internal Affairs"], "[IA]"),
     ]),
     ("👮 LOW COMMAND", [
         ("Captain", ["👮 Captain"], "[LC]"),
@@ -63,7 +63,7 @@ ALL_RANKS = [
 ROLE_TO_TAG = {rn: tag for _, role_names, tag in ALL_RANKS for rn in role_names}
 
 # All known tags (for stripping old ones from nicknames)
-ALL_TAGS = ["[HC]", "[LC]", "[SV]", "[HRT]", "[CADET]"]
+ALL_TAGS = ["[HC]", "[IA]", "[LC]", "[SV]", "[HRT]", "[CADET]"]
 
 
 def load_rank_message():
@@ -76,7 +76,7 @@ def load_rank_message():
 
 def save_rank_message(data: dict):
     with open(RANK_MESSAGE_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=4)
         
 def build_rank_embed(guild: discord.Guild) -> discord.Embed:
 
@@ -235,7 +235,7 @@ def trainer_check(member):
     """Recruiter, Training Officer, and High Command — for /accept, /cadet, /officer, and application buttons."""
     allowed_roles = [
         "📋 Recruiter", "🎓 Training Officer",
-        "⭐ Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander",
+        "🎖 Deputy Commander", "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
 
@@ -245,8 +245,7 @@ def supervisor_check(member):
     allowed_roles = [
         "👮 Lieutenant",
         "👮 Captain",
-        "⭐ Deputy Commander",
-        "🛡 Chief Commander",
+        "🎖 Deputy Commander",
         "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
@@ -260,8 +259,7 @@ def recruiter_check(member):
         "👮 Sergeant",
         "👮 Lieutenant",
         "👮 Captain",
-        "⭐ Deputy Commander",
-        "🛡 Chief Commander",
+        "🎖 Deputy Commander",
         "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
@@ -271,8 +269,7 @@ def recruiter_only_check(member):
     """Recruiter role only (plus High Command)."""
     allowed_roles = [
         "📋 Recruiter",
-        "⭐ Deputy Commander",
-        "🛡 Chief Commander",
+        "🎖 Deputy Commander",
         "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
@@ -281,8 +278,7 @@ def recruiter_only_check(member):
 def high_command_check(member):
     """Deputy Commander and Chief Commander only — for setup commands."""
     allowed_roles = [
-        "⭐ Deputy Commander",
-        "🛡 Chief Commander",
+        "🎖 Deputy Commander",
         "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
@@ -310,7 +306,7 @@ async def archive_channel(channel: discord.TextChannel, guild: discord.Guild):
         everyone: discord.PermissionOverwrite(read_messages=False, send_messages=False)
     }
     for role in guild.roles:
-        if role.name in ["⭐ Deputy Commander", "🎖 Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander"]:
+        if role.name in ["🎖 Deputy Commander", "🎖 Chief Commander"]:
             overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
     await channel.edit(category=old_apps, overwrites=overwrites)
 
@@ -550,7 +546,7 @@ class TicketCloseView(discord.ui.View):
             guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False)
         }
         for role in guild.roles:
-            if role.name in ["⭐ Deputy Commander", "🎖 Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander"]:
+            if role.name in ["🎖 Deputy Commander", "🎖 Chief Commander"]:
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
         await channel.edit(category=old_cat, overwrites=overwrites)
 
@@ -653,7 +649,7 @@ async def _open_ticket(
         user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
     }
     for role in guild.roles:
-        if role.name in staff_role_names + ["⭐ Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander"]:
+        if role.name in staff_role_names + ["🎖 Deputy Commander", "🎖 Chief Commander"]:
             overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
     channel = await guild.create_text_channel(
@@ -708,7 +704,7 @@ class SupportTicketView(discord.ui.View):
 
     @discord.ui.button(label="🔺 High Command", style=discord.ButtonStyle.danger, custom_id="ticket_hc")
     async def hc_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await _open_ticket(interaction, "High Command", ["⭐ Deputy Commander", "🎖 Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander"])
+        await _open_ticket(interaction, "High Command", ["🎖 Deputy Commander", "🎖 Chief Commander"])
 
     @discord.ui.button(label="🎓 Training Officer", style=discord.ButtonStyle.success, custom_id="ticket_training")
     async def training_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -734,8 +730,8 @@ async def clear_rank_roles(member: discord.Member):
 
 
 RANK_CHOICES = [
-    app_commands.Choice(name="🛡 Chief Commander",        value="Chief Commander"),
-    app_commands.Choice(name="⭐ Deputy Commander",       value="Deputy Commander"),
+    app_commands.Choice(name="🎖 Chief Commander",        value="Chief Commander"),
+    app_commands.Choice(name="🎖 Deputy Commander",       value="Deputy Commander"),
     app_commands.Choice(name="🕵 Internal Affairs",       value="Internal Affairs"),
     app_commands.Choice(name="👮 Captain",                value="Captain"),
     app_commands.Choice(name="👮 Lieutenant",             value="Lieutenant"),
@@ -896,30 +892,65 @@ async def fire(
 @bot.tree.command(name="retire", description="Retire a member and give them the Retired role", guild=GUILD)
 @app_commands.describe(member="Member to retire")
 async def retire(interaction: discord.Interaction, member: discord.Member):
-    if not high_command_check(interaction.user):
-        return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-    await clear_rank_roles(member)
 
-    await asyncio.sleep(1)
-    retired_role = discord.utils.get(interaction.guild.roles, name="🎖 Retired")
-    if retired_role:
-        await member.add_roles(retired_role)
-    await update_member_tag(member)
-    await update_rank_board(interaction.guild)
-    embed = discord.Embed(
-        title="🎖 Member Retired",
-        description=f"{member.mention} has been **retired** from active duty by {interaction.user.mention}.",
-        color=discord.Color.gold()
-    )
-    embed.set_footer(text="HRT • Thank you for your service.")
-    await interaction.response.send_message(embed=embed)
+    await interaction.response.defer()
+
     try:
-        await member.send(
-            f"🎖 You have been **retired** from active duty in **HRT**.\n"
-            "Thank you for your service. Your contributions are appreciated."
+
+        if not high_command_check(interaction.user):
+            return await interaction.followup.send(
+                "❌ No permission.",
+                ephemeral=True
+            )
+
+        await clear_rank_roles(member)
+
+        await asyncio.sleep(1)
+
+        retired_role = discord.utils.get(
+            interaction.guild.roles,
+            name="🎖 Retired"
         )
-    except discord.Forbidden:
-        pass
+
+        if retired_role:
+            await member.add_roles(retired_role)
+
+        await update_member_tag(member)
+
+        await update_rank_board(interaction.guild)
+
+        embed = discord.Embed(
+            title="🎖 Member Retired",
+            description=(
+                f"{member.mention} has been retired from active duty "
+                f"by {interaction.user.mention}."
+            ),
+            color=discord.Color.gold()
+        )
+
+        embed.set_footer(
+            text="HRT • Thank you for your service."
+        )
+
+        await interaction.followup.send(embed=embed)
+
+        try:
+            await member.send(
+                f"🎖 You have been retired from active duty in HRT.\n"
+                f"Thank you for your service."
+            )
+
+        except discord.Forbidden:
+            pass
+
+    except Exception as e:
+
+        print(f"[RETIRE COMMAND ERROR] {e}")
+
+        await interaction.followup.send(
+            f"❌ Error: {e}",
+            ephemeral=True
+        )
 
 
 
@@ -1212,7 +1243,7 @@ def load_recruitment_message() -> dict:
 
 def save_recruitment_message(data: dict):
     with open(RECRUITMENT_MESSAGE_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=4)
 
 
 @bot.event
@@ -1286,7 +1317,7 @@ def load_disciplinary_log() -> dict:
 
 def save_disciplinary_log(data: dict):
     with open(DISCIPLINARY_LOG_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=4)
 
 def ia_check(user: discord.Member) -> bool:
     return high_command_check(user) or any(r.name == "🕵 Internal Affairs" for r in user.roles)
