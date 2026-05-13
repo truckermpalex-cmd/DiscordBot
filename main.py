@@ -1241,9 +1241,9 @@ async def on_message(message: discord.Message):
 
 
 
-@bot.tree.command(name="SERT_news", description="Post a SERT news announcement", guild=GUILD)
+@bot.tree.command(name="sert_news", description="Post a SERT news announcement", guild=GUILD)
 @app_commands.describe(title="Title of the news post", news="The news content to announce")
-async def SERT_news(interaction: discord.Interaction, title: str, news: str):
+async def sert_news(interaction: discord.Interaction, title: str, news: str):
     if not high_command_check(interaction.user):
         return await interaction.response.send_message("❌ No permission.", ephemeral=True)
 
