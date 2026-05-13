@@ -31,9 +31,9 @@ ALL_ACTIVE_TICKET_CATEGORIES = list(TICKET_TYPE_CATEGORIES.values())
 
 RANK_SECTIONS = [
     ("🔺 HIGH COMMAND", [
-        ("Chief Commander", ["🛡 Chief Commander", "🎖 Chief Commander"], "[HC]"),
-        ("Deputy Commander", ["⭐ Deputy Commander", "🎖 Deputy Commander"], "[HC]"),
-        ("Internal Affairs", ["🕵 Internal Affairs"], "[HC]"),
+        ("Chief Commander", ["🎖 Chief Commander"], "[HC]"),
+        ("Deputy Commander", ["🎖 Deputy Commander"], "[HC]"),
+        ("Internal Affairs", ["🕵 Internal Affairs"], "[IA]"),
     ]),
     ("👮 LOW COMMAND", [
         ("Captain", ["👮 Captain"], "[LC]"),
@@ -44,11 +44,11 @@ RANK_SECTIONS = [
         ("Corporal", ["👮 Corporal"], "[SV]"),
     ]),
     ("🚔 PATROL GRADE", [
-        ("Senior Patrol Officer", ["🚔 Senior Patrol Officer"], "[SCART]"),
-        ("Patrol Officer", ["🚓 Patrol Officer"], "[SCART]"),
+        ("Senior Patrol Officer", ["🚔 Senior Patrol Officer"], "[HRT]"),
+        ("Patrol Officer", ["🚓 Patrol Officer"], "[HRT]"),
     ]),
     ("🪖 TRAINING PROGRAM", [
-        ("Cadet", ["🪖 SCART Cadet"], "[CADET]"),
+        ("Cadet", ["🪖 HRT Cadet"], "[CADET]"),
     ]),
 ]
 
@@ -63,7 +63,7 @@ ALL_RANKS = [
 ROLE_TO_TAG = {rn: tag for _, role_names, tag in ALL_RANKS for rn in role_names}
 
 # All known tags (for stripping old ones from nicknames)
-ALL_TAGS = ["[HC]", "[LC]", "[SV]", "[SCART]", "[CADET]"]
+ALL_TAGS = ["[HC]", "[IA]", "[LC]", "[SV]", "[HRT]", "[CADET]"]
 
 
 def load_rank_message():
@@ -95,7 +95,7 @@ def save_promotion_order(data: dict):
 
 def build_rank_embed(guild: discord.Guild) -> discord.Embed:
     embed = discord.Embed(
-        title="📊 SCART — RANK STRUCTURE",
+        title="📊 HRT — RANK STRUCTURE",
         description="Live roster showing all members by rank. Updates automatically on promotions and demotions.",
         color=discord.Color.dark_blue()
     )
@@ -124,7 +124,7 @@ def build_rank_embed(guild: discord.Guild) -> discord.Embed:
                 value="\n".join(members) if members else "*None*",
                 inline=False
             )
-    embed.set_footer(text="SCART • Auto-updates on rank changes")
+    embed.set_footer(text="HRT • Auto-updates on rank changes")
     return embed
 
 
@@ -184,7 +184,7 @@ def trainer_check(member):
     """Recruiter, Training Officer, and High Command — for /accept, /cadet, /officer, and application buttons."""
     allowed_roles = [
         "📋 Recruiter", "🎓 Training Officer",
-        "⭐ Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander",
+        "🎖 Deputy Commander", "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
 
@@ -194,8 +194,7 @@ def supervisor_check(member):
     allowed_roles = [
         "👮 Lieutenant",
         "👮 Captain",
-        "⭐ Deputy Commander",
-        "🛡 Chief Commander",
+        "🎖 Deputy Commander",
         "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
@@ -209,8 +208,7 @@ def recruiter_check(member):
         "👮 Sergeant",
         "👮 Lieutenant",
         "👮 Captain",
-        "⭐ Deputy Commander",
-        "🛡 Chief Commander",
+        "🎖 Deputy Commander",
         "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
@@ -220,8 +218,7 @@ def recruiter_only_check(member):
     """Recruiter role only (plus High Command)."""
     allowed_roles = [
         "📋 Recruiter",
-        "⭐ Deputy Commander",
-        "🛡 Chief Commander",
+        "🎖 Deputy Commander",
         "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
@@ -230,8 +227,7 @@ def recruiter_only_check(member):
 def high_command_check(member):
     """Deputy Commander and Chief Commander only — for setup commands."""
     allowed_roles = [
-        "⭐ Deputy Commander",
-        "🛡 Chief Commander",
+        "🎖 Deputy Commander",
         "🎖 Chief Commander",
     ]
     return any(role.name in allowed_roles for role in member.roles)
@@ -259,7 +255,7 @@ async def archive_channel(channel: discord.TextChannel, guild: discord.Guild):
         everyone: discord.PermissionOverwrite(read_messages=False, send_messages=False)
     }
     for role in guild.roles:
-        if role.name in ["⭐ Deputy Commander", "🎖 Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander"]:
+        if role.name in ["🎖 Deputy Commander", "🎖 Chief Commander"]:
             overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
     await channel.edit(category=old_apps, overwrites=overwrites)
 
@@ -308,7 +304,7 @@ class ApplicationDecisionView(discord.ui.View):
                 "⚠️ Could not find the applicant in this server. They may have left.", ephemeral=True
             )
 
-        cadet_role = discord.utils.get(interaction.guild.roles, name="🪖 SCART Cadet") or \
+        cadet_role = discord.utils.get(interaction.guild.roles, name="🪖 HRT Cadet") or \
             next((r for r in interaction.guild.roles if "cadet" in r.name.lower()), None)
 
         if not cadet_role:
@@ -327,7 +323,7 @@ class ApplicationDecisionView(discord.ui.View):
         )
 
         welcome = discord.Embed(
-            title="🎉 Welcome to SCART!",
+            title="🎉 Welcome to HRT!",
             description=(
                 f"Hey {applicant.mention if applicant else 'recruit'}! Your application has been **accepted** — "
                 "welcome to the unit. We're glad to have you on board!\n\n"
@@ -350,7 +346,7 @@ class ApplicationDecisionView(discord.ui.View):
             value="Jump into the CNR server and link up with your fellow officers. Patrols and operations will be announced here.",
             inline=False
         )
-        welcome.set_footer(text="SCART • We Respond. We Protect. We Prevail.")
+        welcome.set_footer(text="HRT • We Respond. We Protect. We Prevail.")
         await interaction.channel.send(embed=welcome)
 
     @discord.ui.button(label="❌ Deny", style=discord.ButtonStyle.danger, custom_id="app_deny")
@@ -362,7 +358,7 @@ class ApplicationDecisionView(discord.ui.View):
         if applicant:
             try:
                 await applicant.send(
-                    "❌ Your application to **SCART** has been reviewed and **denied** at this time. "
+                    "❌ Your application to **HRT** has been reviewed and **denied** at this time. "
                     "You are welcome to re-apply in the future."
                 )
             except discord.Forbidden:
@@ -412,7 +408,7 @@ class ApplyButtonView(discord.ui.View):
         for role in guild.roles:
             if role.name in [
                 "📋 Recruiter", "🎓 Training Officer",
-                "⭐ Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander",
+                "🎖 Deputy Commander", "🎖 Chief Commander",
             ]:
                 overwrites[role] = discord.PermissionOverwrite(
                     read_messages=True, send_messages=True
@@ -426,7 +422,7 @@ class ApplyButtonView(discord.ui.View):
         )
 
         embed = discord.Embed(
-            title="📋 SCART — APPLICATION",
+            title="📋 HRT — APPLICATION",
             description=(
                 f"Welcome {applicant.mention}! Please answer the questions below.\n"
                 "A recruiter will review your application and get back to you."
@@ -439,12 +435,12 @@ class ApplyButtonView(discord.ui.View):
                 "**1.** What is your in-game name on GTA CNR?\n"
                 "**2.** How old are you?\n"
                 "**3.** Do you have a working microphone?\n"
-                "**4.** Do you agree to follow all SCART and CNR rules?\n"
+                "**4.** Do you agree to follow all HRT and CNR rules?\n"
                 "**5.** Please open a ticket in the main CNR discord and ask for your full punishment history."
             ),
             inline=False
         )
-        embed.set_footer(text="SCART Recruitment Division • Answer each question clearly")
+        embed.set_footer(text="HRT Recruitment Division • Answer each question clearly")
 
         decision_view = ApplicationDecisionView(applicant)
         await channel.send(
@@ -555,9 +551,9 @@ async def setup_verify(interaction: discord.Interaction):
         return await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
 
     embed = discord.Embed(
-        title="✅ SCART — VERIFICATION",
+        title="✅ HRT — VERIFICATION",
         description=(
-            "Welcome to **SCART**!\n\n"
+            "Welcome to **HRT**!\n\n"
             "To gain access to the server, click the button below to verify yourself.\n\n"
             "By verifying, you confirm that you have read and agree to follow all server rules."
         ),
@@ -572,7 +568,7 @@ async def setup_verify(interaction: discord.Interaction):
         ),
         inline=False
     )
-    embed.set_footer(text="SCART • Click the button below to verify")
+    embed.set_footer(text="HRT • Click the button below to verify")
 
     await interaction.channel.send(embed=embed, view=VerifyButtonView())
     await interaction.response.send_message("✅ Verification embed posted.", ephemeral=True)
@@ -639,7 +635,7 @@ class TicketCloseView(discord.ui.View):
             guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False)
         }
         for role in guild.roles:
-            if role.name in ["⭐ Deputy Commander", "🎖 Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander"]:
+            if role.name in ["🎖 Deputy Commander", "🎖 Chief Commander"]:
                 overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
         await channel.edit(category=old_cat, overwrites=overwrites)
 
@@ -656,7 +652,7 @@ class TicketCloseView(discord.ui.View):
                     ),
                     color=discord.Color.red()
                 )
-                dm_embed.set_footer(text="SCART Support")
+                dm_embed.set_footer(text="HRT Support")
                 transcript_file_dm = discord.File(
                     fp=__import__("io").BytesIO(transcript_bytes),
                     filename=f"transcript-{channel.name}.txt"
@@ -731,7 +727,7 @@ async def _open_ticket(interaction: discord.Interaction, ticket_type: str, staff
         user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
     }
     for role in guild.roles:
-        if role.name in staff_role_names + ["⭐ Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander"]:
+        if role.name in staff_role_names + ["🎖 Deputy Commander", "🎖 Chief Commander"]:
             overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
     channel = await guild.create_text_channel(
@@ -754,7 +750,7 @@ async def _open_ticket(interaction: discord.Interaction, ticket_type: str, staff
         ),
         color=discord.Color.blurple()
     )
-    embed.set_footer(text="SCART Support • Use the button below to close when resolved.")
+    embed.set_footer(text="HRT Support • Use the button below to close when resolved.")
     await channel.send(content=pings if pings else None, embed=embed, view=TicketCloseView())
     await interaction.response.send_message(f"✅ Your ticket has been opened: {channel.mention}", ephemeral=True)
 
@@ -783,7 +779,7 @@ class SupportTicketView(discord.ui.View):
 
     @discord.ui.button(label="🔺 High Command", style=discord.ButtonStyle.danger, custom_id="ticket_hc")
     async def hc_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await _open_ticket(interaction, "High Command", ["⭐ Deputy Commander", "🎖 Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander"])
+        await _open_ticket(interaction, "High Command", ["🎖 Deputy Commander", "🎖 Chief Commander"])
 
     @discord.ui.button(label="🎓 Training Officer", style=discord.ButtonStyle.success, custom_id="ticket_training")
     async def training_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -864,8 +860,8 @@ async def clear_rank_roles(member: discord.Member):
 
 
 RANK_CHOICES = [
-    app_commands.Choice(name="🛡 Chief Commander",        value="Chief Commander"),
-    app_commands.Choice(name="⭐ Deputy Commander",       value="Deputy Commander"),
+    app_commands.Choice(name="🎖 Chief Commander",        value="Chief Commander"),
+    app_commands.Choice(name="🎖 Deputy Commander",       value="Deputy Commander"),
     app_commands.Choice(name="🕵 Internal Affairs",       value="Internal Affairs"),
     app_commands.Choice(name="👮 Captain",                value="Captain"),
     app_commands.Choice(name="👮 Lieutenant",             value="Lieutenant"),
@@ -874,7 +870,7 @@ RANK_CHOICES = [
     app_commands.Choice(name="🚔 Senior Patrol Officer",  value="Senior Patrol Officer"),
     app_commands.Choice(name="🚓 Patrol Officer",         value="Patrol Officer"),
 
-    app_commands.Choice(name="🪖 SCART Cadet",              value="Cadet"),
+    app_commands.Choice(name="🪖 HRT Cadet",              value="Cadet"),
 ]
 
 
@@ -885,7 +881,7 @@ RANK_CHOICES = [
 async def officer(interaction: discord.Interaction, member: discord.Member):
     if not trainer_check(interaction.user):
         return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-    cadet_role = discord.utils.get(interaction.guild.roles, name="🪖 SCART Cadet")
+    cadet_role = discord.utils.get(interaction.guild.roles, name="🪖 HRT Cadet")
     officer_role = discord.utils.get(interaction.guild.roles, name="🚓 Patrol Officer")
     if not officer_role:
         return await interaction.response.send_message("❌ Patrol Officer role not found.", ephemeral=True)
@@ -930,7 +926,7 @@ async def demote(interaction: discord.Interaction, member: discord.Member, rank:
     )
 
 
-@bot.tree.command(name="fire", description="Remove a member from SCART", guild=GUILD)
+@bot.tree.command(name="fire", description="Remove a member from HRT", guild=GUILD)
 @app_commands.describe(member="Member to fire", reason="Reason for termination")
 async def fire(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
     if not high_command_check(interaction.user):
@@ -939,14 +935,14 @@ async def fire(interaction: discord.Interaction, member: discord.Member, reason:
     await update_member_tag(member)
     embed = discord.Embed(
         title="🚫 Member Terminated",
-        description=f"{member.mention} has been **fired** from SCART by {interaction.user.mention}.",
+        description=f"{member.mention} has been **fired** from HRT by {interaction.user.mention}.",
         color=discord.Color.red()
     )
     embed.add_field(name="Reason", value=reason, inline=False)
     await interaction.response.send_message(embed=embed)
     try:
         await member.send(
-            f"🚫 You have been **terminated** from **SCART** by {interaction.user.display_name}.\n"
+            f"🚫 You have been **terminated** from **HRT** by {interaction.user.display_name}.\n"
             f"**Reason:** {reason}"
         )
     except discord.Forbidden:
@@ -968,11 +964,11 @@ async def retire(interaction: discord.Interaction, member: discord.Member):
         description=f"{member.mention} has been **retired** from active duty by {interaction.user.mention}.",
         color=discord.Color.gold()
     )
-    embed.set_footer(text="SCART • Thank you for your service.")
+    embed.set_footer(text="HRT • Thank you for your service.")
     await interaction.response.send_message(embed=embed)
     try:
         await member.send(
-            f"🎖 You have been **retired** from active duty in **SCART**.\n"
+            f"🎖 You have been **retired** from active duty in **HRT**.\n"
             "Thank you for your service. Your contributions are appreciated."
         )
     except discord.Forbidden:
@@ -994,20 +990,20 @@ async def setup_faq(interaction: discord.Interaction):
     support_link = support_channel.mention if support_channel else "#support"
 
     embed = discord.Embed(
-        title="❓ SCART — FREQUENTLY ASKED QUESTIONS",
-        description="Here are answers to the most common questions about SCART.",
+        title="❓ HRT — FREQUENTLY ASKED QUESTIONS",
+        description="Here are answers to the most common questions about HRT.",
         color=discord.Color.dark_blue()
     )
     embed.add_field(
-        name="❓ What is SCART?",
+        name="❓ What is HRT?",
         value=(
-            "SCART is an elite law enforcement unit on **GTA Cops and Robbers (CNR)**. "
+            "HRT is an elite law enforcement unit on **GTA Cops and Robbers (CNR)**. "
             "We are a structured, discipline-driven unit focused on professional operations, teamwork, and rank progression."
         ),
         inline=False
     )
     embed.add_field(
-        name="❓ How do I join SCART?",
+        name="❓ How do I join HRT?",
         value=(
             f"Head to {apps_link} and click **Apply Now**. "
             "A private channel will be created for you where a recruiter will guide you through the process."
@@ -1057,7 +1053,7 @@ async def setup_faq(interaction: discord.Interaction):
         ),
         inline=False
     )
-    embed.set_footer(text="SCART • We Respond. We Protect. We Prevail.")
+    embed.set_footer(text="HRT • We Respond. We Protect. We Prevail.")
     await interaction.channel.send(embed=embed)
     await interaction.response.send_message("✅ FAQ embed posted.", ephemeral=True)
 
@@ -1068,7 +1064,7 @@ async def setup_rules(interaction: discord.Interaction):
         return await interaction.response.send_message("❌ No permission.", ephemeral=True)
 
     embed = discord.Embed(
-        title="📜 SCART — SERVER RULES",
+        title="📜 HRT — SERVER RULES",
         description=(
             "All members are expected to read and follow these rules at all times. "
             "Failure to comply may result in warnings, demotion, or removal from the server."
@@ -1126,7 +1122,7 @@ async def setup_rules(interaction: discord.Interaction):
         ),
         inline=False
     )
-    embed.set_footer(text="SCART Administration • Violations will be handled by Command Staff")
+    embed.set_footer(text="HRT Administration • Violations will be handled by Command Staff")
     await interaction.channel.send(embed=embed)
     await interaction.response.send_message("✅ Rules embed sent.", ephemeral=True)
 
@@ -1143,9 +1139,9 @@ async def setup_info(interaction: discord.Interaction):
     apps_link = apps_channel.mention if apps_channel else "#applications"
 
     embed = discord.Embed(
-        title="🚔 SCART — SERVER INFORMATION",
+        title="🚔 HRT — SERVER INFORMATION",
         description=(
-            "**SCART** is an elite tactical law enforcement unit operating on **GTA Cops and Robbers (CNR)**. "
+            "**HRT** is an elite tactical law enforcement unit operating on **GTA Cops and Robbers (CNR)**. "
             "We are a structured, discipline-driven unit built around professional operations "
             "and strong teamwork. "
             "Our mission is to uphold the law, protect civilians, and execute high-risk operations with precision."
@@ -1155,7 +1151,7 @@ async def setup_info(interaction: discord.Interaction):
     embed.add_field(
         name="🎯 Our Mission",
         value=(
-            "SCART responds to the most critical and high-risk situations on the CNR server. "
+            "HRT responds to the most critical and high-risk situations on the CNR server. "
             "From coordinated raids to active pursuits, we operate as a unit — always professional, always disciplined."
         ),
         inline=False
@@ -1178,7 +1174,7 @@ async def setup_info(interaction: discord.Interaction):
             "• Mature and professional behavior\n"
             "• Team-oriented mindset\n"
             "• Willingness to follow chain of command\n"
-            "• Must follow all CNR and SCART rules"
+            "• Must follow all CNR and HRT rules"
         ),
         inline=False
     )
@@ -1192,7 +1188,7 @@ async def setup_info(interaction: discord.Interaction):
         ),
         inline=False
     )
-    embed.set_footer(text="SCART • We Respond. We Protect. We Prevail.")
+    embed.set_footer(text="HRT • We Respond. We Protect. We Prevail.")
     await interaction.channel.send(embed=embed)
     await interaction.response.send_message("✅ Info embed sent.", ephemeral=True)
 
@@ -1204,9 +1200,9 @@ async def setup_application(interaction: discord.Interaction):
         return await interaction.response.send_message("❌ No permission.", ephemeral=True)
 
     embed = discord.Embed(
-        title="📋 SCART — APPLICATIONS",
+        title="📋 HRT — APPLICATIONS",
         description=(
-            "Interested in joining **SCART**? Click the button below to open your application.\n\n"
+            "Interested in joining **HRT**? Click the button below to open your application.\n\n"
             "**Requirements:**\n"
             "• Active GTA CNR player\n"
             "• Working microphone\n"
@@ -1217,7 +1213,7 @@ async def setup_application(interaction: discord.Interaction):
         ),
         color=discord.Color.gold()
     )
-    embed.set_footer(text="SCART Recruitment Division • We Respond. We Protect. We Prevail.")
+    embed.set_footer(text="HRT Recruitment Division • We Respond. We Protect. We Prevail.")
 
     await interaction.channel.send(embed=embed, view=ApplyButtonView())
     await interaction.response.send_message("✅ Application embed sent.", ephemeral=True)
@@ -1236,9 +1232,9 @@ async def setup_ranks(interaction: discord.Interaction):
 
 def build_recruitment_embed() -> discord.Embed:
     embed = discord.Embed(
-        title="🚨 SCART RECRUITMENT 🚨",
+        title="🚨 HRT RECRUITMENT 🚨",
         description=(
-            "SCART is recruiting disciplined "
+            "HRT is recruiting disciplined "
             "and active members for tactical operations."
         ),
         color=discord.Color.red()
@@ -1296,18 +1292,18 @@ async def on_message(message: discord.Message):
 
 
 
-@bot.tree.command(name="scart_news", description="Post a SCART news announcement", guild=GUILD)
+@bot.tree.command(name="hrt_news", description="Post a HRT news announcement", guild=GUILD)
 @app_commands.describe(title="Title of the news post", news="The news content to announce")
-async def scart_news(interaction: discord.Interaction, title: str, news: str):
+async def hrt_news(interaction: discord.Interaction, title: str, news: str):
     if not high_command_check(interaction.user):
         return await interaction.response.send_message("❌ No permission.", ephemeral=True)
 
     embed = discord.Embed(
-        title=f"📰 SCART NEWS — {title.upper()}",
+        title=f"📰 HRT NEWS — {title.upper()}",
         description=news,
         color=discord.Color.dark_blue()
     )
-    embed.set_footer(text=f"Posted by {interaction.user.display_name} • SCART Command")
+    embed.set_footer(text=f"Posted by {interaction.user.display_name} • HRT Command")
     await interaction.channel.send(embed=embed)
     await interaction.response.send_message("✅ News post sent.", ephemeral=True)
 
@@ -1369,7 +1365,7 @@ async def investigation(
     if original_link:
         embed.add_field(name="🔗 Original Report", value=f"[Jump to original report]({original_link})", inline=False)
     embed.add_field(name="🕵 Investigating Officer", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
-    embed.set_footer(text="SCART Internal Affairs • Confidential")
+    embed.set_footer(text="HRT Internal Affairs • Confidential")
     await interaction.channel.send(embed=embed)
     await interaction.response.send_message("✅ Investigation report posted.", ephemeral=True)
 
@@ -1398,7 +1394,7 @@ async def officer_report(
     embed.add_field(name="👁 Witnesses", value=witnesses, inline=False)
     embed.add_field(name="⚖️ Recommendation", value=recommendation, inline=False)
     embed.add_field(name="🕵 Reporting Officer", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
-    embed.set_footer(text="SCART Internal Affairs • Confidential")
+    embed.set_footer(text="HRT Internal Affairs • Confidential")
 
     reports_channel = discord.utils.find(
         lambda c: "officer-reports" in c.name.lower(), interaction.guild.text_channels
@@ -1444,7 +1440,7 @@ async def disciplinary_action(
     embed.add_field(name="⚖️ Action Taken", value=action.value, inline=False)
     embed.add_field(name="📝 Notes", value=notes, inline=False)
     embed.add_field(name="🕵 Issued By", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
-    embed.set_footer(text="SCART Internal Affairs • Confidential")
+    embed.set_footer(text="HRT Internal Affairs • Confidential")
     await interaction.channel.send(embed=embed)
 
     try:
@@ -1460,7 +1456,7 @@ async def disciplinary_action(
             ),
             color=discord.Color.red()
         )
-        dm_embed.set_footer(text="SCART Internal Affairs • Confidential")
+        dm_embed.set_footer(text="HRT Internal Affairs • Confidential")
         await subject.send(embed=dm_embed)
     except discord.Forbidden:
         pass
@@ -1526,7 +1522,7 @@ async def officer_conduct(interaction: discord.Interaction, member: discord.Memb
                     inline=False
                 )
 
-    embed.set_footer(text=f"Active: {len(active)} • Total: {len(records)} • SCART Internal Affairs")
+    embed.set_footer(text=f"Active: {len(active)} • Total: {len(records)} • HRT Internal Affairs")
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -1624,7 +1620,7 @@ async def recruitment_log(
     embed.add_field(name="🗓 Date", value=f"<t:{int(__import__('datetime').datetime.utcnow().timestamp())}:D>", inline=False)
     if notes:
         embed.add_field(name="📝 Notes", value=notes, inline=False)
-    embed.set_footer(text="SCART Recruitment Division")
+    embed.set_footer(text="HRT Recruitment Division")
 
     await log_channel.send(embed=embed)
     await interaction.response.send_message(
