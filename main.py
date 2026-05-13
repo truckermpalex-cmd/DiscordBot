@@ -108,8 +108,15 @@ def build_rank_embed(guild: discord.Guild) -> discord.Embed:
             members = []
 
             if role:
+
+                # FORCE fresh member scan from guild members
+                fresh_members = [
+                    m for m in guild.members
+                    if role in m.roles
+                ]
+
                 sorted_members = sorted(
-                    role.members,
+                    fresh_members,
                     key=lambda m: m.joined_at or discord.utils.utcnow()
                 )
 
@@ -189,7 +196,8 @@ async def update_rank_board(guild: discord.Guild):
     except Exception as e:
         print(f"[RANK BOARD ERROR] {e}")
 
-intents = discord.Intents.default()
+intents = discord.Intents.all()
+
 intents.members = True
 intents.guilds = True
 intents.message_content = True
@@ -497,8 +505,11 @@ async def on_ready():
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
 
-    if before.roles == after.roles:
-        return
+    before_role_ids = {r.id for r in before.roles}
+after_role_ids = {r.id for r in after.roles}
+
+if before_role_ids == after_role_ids:
+    return
 
     await update_member_tag(after)
 
@@ -829,20 +840,31 @@ async def promote(
             ephemeral=True
         )
 
+    print("[DEBUG] Clearing old rank roles...")
+
     await clear_rank_roles(member)
-
-    await member.add_roles(target_role)
-
-    await update_member_tag(member)
 
     await asyncio.sleep(1)
 
+    print(f"[DEBUG] Adding role: {target_role.name}")
+
+    await member.add_roles(target_role)
+
+    await asyncio.sleep(2)
+
+    print("[DEBUG] Updating nickname tag...")
+
+    await update_member_tag(member)
+
+    print("[DEBUG] Updating rank board...")
+
     await update_rank_board(interaction.guild)
+
+    print("[DEBUG] Promotion complete.")
 
     await interaction.response.send_message(
         f"⬆️ {member.mention} has been promoted to **{rank.name}** by {interaction.user.mention}."
     )
-
 
 @bot.tree.command(name="demote", description="Demote a member to a selected rank", guild=GUILD)
 @app_commands.describe(member="Member to demote", rank="Rank to demote to")
