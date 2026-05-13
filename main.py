@@ -789,6 +789,61 @@ class SupportTicketView(discord.ui.View):
     async def training_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await _open_ticket(interaction, "Training Officer", ["🎓 Training Officer"])
 
+# =========================================================
+# TICKET PANEL COMMAND
+# =========================================================
+
+@bot.tree.command(
+    name="tickets",
+    description="Post the support ticket panel",
+    guild=GUILD
+)
+async def tickets(interaction: discord.Interaction):
+
+    if not high_command_check(interaction.user):
+        return await interaction.response.send_message(
+            "❌ No permission.",
+            ephemeral=True
+        )
+
+    embed = discord.Embed(
+        title="🎫 HRT SUPPORT CENTER",
+        description=(
+            "Need assistance? Open a support ticket below.\n\n"
+
+            "Choose the correct department:\n\n"
+
+            "🎫 **General Support**\n"
+            "General questions or assistance.\n\n"
+
+            "👮 **Supervisor Ticket**\n"
+            "Supervisor reports, patrol concerns, or staff complaints.\n\n"
+
+            "🔺 **High Command Ticket**\n"
+            "Appeals, serious reports, or command matters.\n\n"
+
+            "🎓 **Training Officer Ticket**\n"
+            "Training academy or cadet assistance."
+        ),
+        color=discord.Color.blurple()
+    )
+
+    if interaction.guild.icon:
+        embed.set_thumbnail(url=interaction.guild.icon.url)
+
+    embed.set_footer(
+        text="HRT Support System"
+    )
+
+    await interaction.channel.send(
+        embed=embed,
+        view=SupportTicketView()
+    )
+
+    await interaction.response.send_message(
+        "✅ Ticket panel posted.",
+        ephemeral=True
+    )
 
 def get_rank_role(guild: discord.Guild, display_name: str):
     """Return the first matching Discord role for a rank display name."""
