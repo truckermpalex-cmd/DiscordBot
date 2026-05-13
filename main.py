@@ -491,25 +491,19 @@ class ApplyButtonView(discord.ui.View):
 
 @bot.event
 async def on_ready():
-
     print(f"Logged in as {bot.user}")
 
     try:
-
         bot.add_view(ApplyButtonView())
         bot.add_view(ApplicationDecisionView(None))
         bot.add_view(VerifyButtonView())
         bot.add_view(SupportTicketView())
         bot.add_view(TicketCloseView())
 
-        # =====================================================
-        # RESTORE DISCIPLINARY VIEWS
-        # =====================================================
-
+        # Restore disciplinary views
         pending = load_pending_cases()
 
         for case_id, case in pending.items():
-
             bot.add_view(
                 DisciplinaryApprovalView(
                     case_id=case_id,
@@ -526,60 +520,32 @@ async def on_ready():
         print(f"Synced {len(synced)} slash commands.")
 
     except Exception as e:
-        print(e)
+        print("Error during startup:")
+        import traceback
+        traceback.print_exc()
 
-
-@bot.event
-async def on_member_update(before: discord.Member, after: discord.Member):
-    if before.roles == after.roles:
-        return
-
-    added_roles = set(after.roles) - set(before.roles)
-    removed_roles = set(before.roles) - set(after.roles)
-
-    all_rank_role_names = {rn for _display, role_names, _tag in ALL_RANKS for rn in role_names}
-
-    promo_data = load_promotion_order()
-    changed = False
-
-    for role in added_roles:
-        if role.name in all_rank_role_names:
-            order = promo_data.setdefault(role.name, [])
-            uid = str(after.id)
-            if uid not in order:
-                order.append(uid)
-                changed = True
-
-    for role in removed_roles:
-        if role.name in all_rank_role_names:
-            uid = str(after.id)
-            if uid in promo_data.get(role.name, []):
-                promo_data[role.name].remove(uid)
-                changed = True
-
-    if changed:
-        save_promotion_order(promo_data)
-
-    await update_member_tag(after)
-    await update_rank_board(after.guild)
-
+import traceback
 
 @bot.event
 async def on_member_join(member: discord.Member):
-    guild = member.guild
-    info_channel = next(
-        (ch for ch in guild.text_channels if "info" in ch.name.lower()),
-        None
-    )
-    if info_channel:
-        await info_channel.set_permissions(
-            member,
-            read_messages=True,
-            send_messages=False,
-            read_message_history=True
+    try:
+        guild = member.guild
+
+        info_channel = next(
+            (ch for ch in guild.text_channels if "info" in ch.name.lower()),
+            None
         )
 
+        if info_channel:
+            await info_channel.set_permissions(
+                member,
+                read_messages=True,
+                send_messages=False,
+                read_message_history=True
+            )
 
+    except Exception:
+        traceback.print_exc()
 # =========================================================
 # SLASH COMMANDS
 # =========================================================
