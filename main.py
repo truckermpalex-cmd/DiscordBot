@@ -4,6 +4,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+import time
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
 GUILD_ID = 1503750714273304649
@@ -119,7 +120,7 @@ def build_rank_embed(guild: discord.Guild) -> discord.Embed:
                     key=lambda m: m.joined_at or discord.utils.utcnow()
                 )
 
-                members = [m.display_name for m in sorted_members]
+                members = [m.mention for m in sorted_members]
 
             member_text = "\n".join(members)
 
@@ -197,14 +198,38 @@ async def update_rank_board(guild: discord.Guild):
     except Exception as e:
         print(f"[RANK BOARD ERROR] {e}")
         
-intents = discord.Intents.all()
-
+intents = discord.Intents.default()
 intents.members = True
 intents.guilds = True
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+@bot.event
+async def on_app_command_error(interaction: discord.Interaction, error):
+    print(f"[APP COMMAND ERROR] {error}")
+
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                f"❌ Error: {error}",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                f"❌ Error: {error}",
+                ephemeral=True
+            )
+
+    except Exception as e:
+        print(f"[ERROR HANDLER FAILED] {e}")
+
+@bot.event
+async def on_error(event, *args, **kwargs):
+    import traceback
+
+    print(f"[EVENT ERROR] {event}")
+    traceback.print_exc()
 
 def trainer_check(member):
     """Recruiter, Training Officer, and High Command — for /accept, /cadet, /officer, and application buttons."""
@@ -291,202 +316,98 @@ async def archive_channel(channel: discord.TextChannel, guild: discord.Guild):
 
 
 class ApplicationDecisionView(discord.ui.View):
-    def __init__(self, applicant: discord.Member):
+    def __init__(self, applicant: discord.Member | None):
         super().__init__(timeout=None)
         self.applicant = applicant
 
-    @discord.ui.button(label="🔒 Claim", style=discord.ButtonStyle.secondary, custom_id="app_claim")
-    async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not trainer_check(interaction.user):
-            return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-        await interaction.response.send_message(
-            f"🔒 This application has been **claimed** by {interaction.user.mention}."
-        )
-
-    @discord.ui.button(label="🔓 Unclaim", style=discord.ButtonStyle.secondary, custom_id="app_unclaim")
-    async def unclaim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not trainer_check(interaction.user):
-            return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-        await interaction.response.send_message(
-            f"🔓 This application has been **unclaimed** by {interaction.user.mention}."
-        )
-
-    async def _resolve_applicant(self, interaction: discord.Interaction) -> discord.Member | None:
-        """Fetch the applicant from the channel topic (survives bot restarts)."""
+    async def _resolve_applicant(self, interaction: discord.Interaction):
         if self.applicant:
             return self.applicant
+
         topic = interaction.channel.topic
-        if topic and topic.isdigit():
-            try:
-                return await interaction.guild.fetch_member(int(topic))
-            except (discord.NotFound, discord.HTTPException):
-                return None
+
+        if topic:
+            user_id = topic.split(" | ")[0]
+
+            if user_id.isdigit():
+                try:
+                    return await interaction.guild.fetch_member(int(user_id))
+                except (discord.NotFound, discord.HTTPException):
+                    return None
+
         return None
 
-    @discord.ui.button(label="✅ Accept", style=discord.ButtonStyle.success, custom_id="app_accept")
-    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(
+        label="🔒 Claim",
+        style=discord.ButtonStyle.secondary,
+        custom_id="app_claim"
+    )
+    async def claim_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
         if not trainer_check(interaction.user):
-            return await interaction.response.send_message("❌ No permission.", ephemeral=True)
+            return await interaction.response.send_message(
+                "❌ No permission.",
+                ephemeral=True
+            )
+
+        await interaction.response.send_message(
+            f"🔒 This application has been claimed by {interaction.user.mention}."
+        )
+
+    @discord.ui.button(
+        label="🔓 Unclaim",
+        style=discord.ButtonStyle.secondary,
+        custom_id="app_unclaim"
+    )
+    async def unclaim_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        if not trainer_check(interaction.user):
+            return await interaction.response.send_message(
+                "❌ No permission.",
+                ephemeral=True
+            )
+
+        await interaction.response.send_message(
+            f"🔓 This application has been unclaimed by {interaction.user.mention}."
+        )
+
+    @discord.ui.button(
+        label="✅ Accept",
+        style=discord.ButtonStyle.success,
+        custom_id="app_accept"
+    )
+    async def accept_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        if not trainer_check(interaction.user):
+            return await interaction.response.send_message(
+                "❌ No permission.",
+                ephemeral=True
+            )
 
         applicant = await self._resolve_applicant(interaction)
+
         if not applicant:
             return await interaction.response.send_message(
-                "⚠️ Could not find the applicant in this server. They may have left.", ephemeral=True
-            )
-
-        cadet_role = discord.utils.get(interaction.guild.roles, name="🪖 HRT Cadet") or \
-            next((r for r in interaction.guild.roles if "cadet" in r.name.lower()), None)
-
-        if not cadet_role:
-            await interaction.response.send_message(
-                f"⚠️ Accepted {applicant.mention} but could not find a **Cadet** role in this server — "
-                "please assign it manually.",
+                "⚠️ Applicant could not be found.",
                 ephemeral=True
             )
-            return
-
-        await applicant.add_roles(cadet_role)
-        await update_member_tag(applicant)
-        print(f"[ACCEPT] Gave {applicant} the role '{cadet_role.name}' and updated tag.")
-        await interaction.response.send_message(
-            f"✅ Application **accepted**! {applicant.mention} has been given **{cadet_role.name}**."
-        )
-
-        welcome = discord.Embed(
-            title="🎉 Welcome to HRT!",
-            description=(
-                f"Hey {applicant.mention if applicant else 'recruit'}! Your application has been **accepted** — "
-                "welcome to the unit. We're glad to have you on board!\n\n"
-                "Here's a quick rundown of where everything is:"
-            ),
-            color=discord.Color.green()
-        )
-        welcome.add_field(
-            name="📜 Rules",
-            value="Head over to the rules channel and give them a read before anything else.",
-            inline=False
-        )
-        welcome.add_field(
-            name="📋 Rank & Roles",
-            value="You've been given the **Cadet** role and the `[CADET]` tag. Complete your training to advance through the ranks.",
-            inline=False
-        )
-        welcome.add_field(
-            name="🎮 Getting Started",
-            value="Jump into the CNR server and link up with your fellow officers. Patrols and operations will be announced here.",
-            inline=False
-        )
-        welcome.set_footer(text="HRT • We Respond. We Protect. We Prevail.")
-        await interaction.channel.send(embed=welcome)
-
-    @discord.ui.button(label="❌ Deny", style=discord.ButtonStyle.danger, custom_id="app_deny")
-    async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not trainer_check(interaction.user):
-            return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-
-        applicant = await self._resolve_applicant(interaction)
-        if applicant:
-            try:
-                await applicant.send(
-                    "❌ Your application to **HRT** has been reviewed and **denied** at this time. "
-                    "You are welcome to re-apply in the future."
-                )
-            except discord.Forbidden:
-                pass
-
-        await interaction.response.send_message("❌ Application **denied**.")
-
-    @discord.ui.button(label="🗑 Close", style=discord.ButtonStyle.secondary, custom_id="app_close")
-    async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not trainer_check(interaction.user):
-            return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-        await interaction.response.send_message("🗑 Closing channel...")
-        await archive_channel(interaction.channel, interaction.guild)
-
-
-class ApplyButtonView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="📋 Apply Now", style=discord.ButtonStyle.primary, custom_id="apply_now")
-    async def apply_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild = interaction.guild
-        applicant = interaction.user
-
-        # Check if they already have an open (non-archived) application
-        existing = discord.utils.get(
-            guild.text_channels,
-            name=f"app-{applicant.name.lower().replace(' ', '-')}"
-        )
-        if existing and existing.category and existing.category.name == ACTIVE_APPS_CATEGORY_NAME:
-            return await interaction.response.send_message(
-                f"⚠️ You already have an open application: {existing.mention}",
-                ephemeral=True
-            )
-
-        # Find or create the active applications category below recruitment
-        category = await get_or_create_category(
-            guild, ACTIVE_APPS_CATEGORY_NAME, position_after=RECRUITMENT_CATEGORY_NAME
-        )
-
-        # Set permissions: applicant + recruiters can see, everyone else cannot
-        everyone = guild.default_role
-        overwrites = {
-            everyone: discord.PermissionOverwrite(read_messages=False),
-            applicant: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-        }
-        for role in guild.roles:
-            if role.name in [
-                "📋 Recruiter", "🎓 Training Officer",
-                "⭐ Deputy Commander", "🛡 Chief Commander", "🎖 Chief Commander",
-            ]:
-                overwrites[role] = discord.PermissionOverwrite(
-                    read_messages=True, send_messages=True
-                )
-
-        channel = await guild.create_text_channel(
-            name=f"app-{applicant.name.lower().replace(' ', '-')}",
-            category=category,
-            overwrites=overwrites,
-            topic=str(applicant.id)
-        )
-
-        embed = discord.Embed(
-            title="📋 HRT — APPLICATION",
-            description=(
-                f"Welcome {applicant.mention}! Please answer the questions below.\n"
-                "A recruiter will review your application and get back to you."
-            ),
-            color=discord.Color.gold()
-        )
-        embed.add_field(
-            name="Questions",
-            value=(
-                "**1.** What is your in-game name on GTA CNR?\n"
-                "**2.** How old are you?\n"
-                "**3.** Do you have a working microphone?\n"
-                "**4.** Do you agree to follow all HRT and CNR rules?\n"
-                "**5.** Please open a ticket in the main CNR discord and ask for your full punishment history."
-            ),
-            inline=False
-        )
-        embed.set_footer(text="HRT Recruitment Division • Answer each question clearly")
-
-        decision_view = ApplicationDecisionView(applicant)
-        await channel.send(
-            content=f"{applicant.mention} — please answer the questions below. "
-                    f"Recruitment staff will review your application.",
-            embed=embed,
-            view=decision_view
-        )
-
-        await interaction.response.send_message(
-            f"✅ Your application has been created: {channel.mention}",
-            ephemeral=True
         )
 
 @bot.event
 async def on_ready():
+
     print(f"Logged in as {bot.user}")
 
     try:
@@ -496,11 +417,19 @@ async def on_ready():
         bot.add_view(SupportTicketView())
         bot.add_view(TicketCloseView())
 
-        synced = await bot.tree.sync(guild=GUILD)
+        try:
+            synced = await bot.tree.sync(guild=GUILD)
+            print(f"Guild synced: {len(synced)}")
 
-        print(f"Synced {len(synced)} slash commands to guild.")
+        except Exception as e:
+            print(f"Guild sync failed: {e}")
+
+            synced = await bot.tree.sync()
+            print(f"Global synced: {len(synced)}")
 
         guild = bot.get_guild(GUILD_ID)
+
+        print(f"[DEBUG] Guild found: {guild}")
 
         if guild:
             await update_rank_board(guild)
@@ -677,23 +606,34 @@ async def send_ticket_log(guild: discord.Guild, embed: discord.Embed, file: disc
             pass
 
 
-async def _open_ticket(interaction: discord.Interaction, ticket_type: str, staff_role_names: list[str]):
-    """Shared helper — creates a private ticket channel and pings the relevant staff."""
+async def _open_ticket(
+    interaction: discord.Interaction,
+    ticket_type: str,
+    staff_role_names: list[str]
+):
+
+    await interaction.response.defer(ephemeral=True)
+
     guild = interaction.guild
     user = interaction.user
+
     safe_name = user.name.lower().replace(" ", "-")
     type_slug = ticket_type.lower().replace(" ", "-")
     channel_name = f"ticket-{type_slug}-{safe_name}"
 
-    # Count all open tickets for this user across every active ticket category
+    # Count all open tickets
     open_tickets = [
         ch for ch in guild.text_channels
-        if ch.category and ch.category.name in ALL_ACTIVE_TICKET_CATEGORIES
-        and ch.topic and ch.topic.startswith(str(user.id))
+        if ch.category
+        and ch.category.name in ALL_ACTIVE_TICKET_CATEGORIES
+        and ch.topic
+        and ch.topic.startswith(str(user.id))
     ]
+
     if len(open_tickets) >= 3:
         mentions = ", ".join(ch.mention for ch in open_tickets)
-        return await interaction.response.send_message(
+
+        return await interaction.followup.send(
             f"⚠️ You already have **{len(open_tickets)}/3** tickets open: {mentions}\n"
             "Please wait for one to be resolved before opening another.",
             ephemeral=True
@@ -702,7 +642,7 @@ async def _open_ticket(interaction: discord.Interaction, ticket_type: str, staff
     # Also block duplicate of the exact same type
     existing_same_type = discord.utils.get(guild.text_channels, name=channel_name)
     if existing_same_type and existing_same_type.category and existing_same_type.category.name in ALL_ACTIVE_TICKET_CATEGORIES:
-        return await interaction.response.send_message(
+        return await interaction.followup.send(
             f"⚠️ You already have an open {ticket_type} ticket: {existing_same_type.mention}", ephemeral=True
         )
 
@@ -739,7 +679,10 @@ async def _open_ticket(interaction: discord.Interaction, ticket_type: str, staff
     )
     embed.set_footer(text="HRT Support • Use the button below to close when resolved.")
     await channel.send(content=pings if pings else None, embed=embed, view=TicketCloseView())
-    await interaction.response.send_message(f"✅ Your ticket has been opened: {channel.mention}", ephemeral=True)
+    await interaction.followup.send(
+    f"✅ Your ticket has been opened: {channel.mention}",
+    ephemeral=True
+)
 
     log_embed = discord.Embed(
         title="🎫 Ticket Opened",
@@ -953,9 +896,10 @@ async def setup_faq(interaction: discord.Interaction):
 
     guild = interaction.guild
     apps_channel = discord.utils.get(guild.text_channels, name=APPLICATIONS_CHANNEL_NAME)
-    support_channel = next(
-        (c for c in guild.text_channels if "open-ticket" in c.name.lower()), None
-    )
+    support_channel = discord.utils.get(
+    guild.text_channels,
+    name="open-tickets"
+)
     apps_link = apps_channel.mention if apps_channel else "#applications"
     support_link = support_channel.mention if support_channel else "#support"
 
@@ -1239,27 +1183,48 @@ def save_recruitment_message(data: dict):
 
 @bot.event
 async def on_message(message: discord.Message):
+
+    global LAST_RECRUITMENT_POST
+
     if message.author.bot:
         return
+
     if not message.guild or message.guild.id != GUILD_ID:
         return
+
     if message.channel.name != GENERAL_CHAT_NAME:
         await bot.process_commands(message)
         return
 
+    # Cooldown protection
+    if time.time() - LAST_RECRUITMENT_POST < RECRUITMENT_COOLDOWN:
+        await bot.process_commands(message)
+        return
+
     data = load_recruitment_message()
+
     old_msg_id = data.get("message_id")
+
     if old_msg_id:
         try:
             old_msg = await message.channel.fetch_message(old_msg_id)
             await old_msg.delete()
+
         except (discord.NotFound, discord.Forbidden):
             pass
 
-    new_msg = await message.channel.send(embed=build_recruitment_embed())
-    save_recruitment_message({"message_id": new_msg.id, "channel_id": message.channel.id})
-    await bot.process_commands(message)
+    new_msg = await message.channel.send(
+        embed=build_recruitment_embed()
+    )
 
+    save_recruitment_message({
+        "message_id": new_msg.id,
+        "channel_id": message.channel.id
+    })
+
+    LAST_RECRUITMENT_POST = time.time()
+
+    await bot.process_commands(message)
 
 
 @bot.tree.command(name="hrt_news", description="Post a HRT news announcement", guild=GUILD)
