@@ -33,7 +33,6 @@ RANK_SECTIONS = [
     ("🔺 HIGH COMMAND", [
         ("Chief Commander", ["🎖 Chief Commander"], "[HC]"),
         ("Deputy Commander", ["🎖 Deputy Commander"], "[HC]"),
-        ("Internal Affairs", ["🕵 Internal Affairs"], "[IA]"),
     ]),
     ("👮 LOW COMMAND", [
         ("Captain", ["👮 Captain"], "[LC]"),
@@ -63,7 +62,41 @@ ALL_RANKS = [
 ROLE_TO_TAG = {rn: tag for _, role_names, tag in ALL_RANKS for rn in role_names}
 
 # All known tags (for stripping old ones from nicknames)
-ALL_TAGS = ["[HC]", "[IA]", "[LC]", "[SV]", "[HRT]", "[CADET]"]
+ALL_TAGS = ["[HC]", "[LC]", "[SV]", "[HRT]", "[CADET]"]
+
+# =========================================================
+# RANK HIERARCHY
+# Higher number = higher authority
+# =========================================================
+
+RANK_HIERARCHY = {
+    "Cadet": 1,
+    "Patrol Officer": 2,
+    "Senior Patrol Officer": 3,
+    "Corporal": 4,
+    "Sergeant": 5,
+    "Lieutenant": 6,
+    "Captain": 7,
+    "Deputy Commander": 8,
+    "Chief Commander": 9,
+}
+
+
+def get_member_rank_level(member: discord.Member) -> int:
+    """Return the highest rank level a member has."""
+    highest = 0
+
+    for display, role_names, _tag in ALL_RANKS:
+        for rn in role_names:
+            if any(r.name == rn for r in member.roles):
+                highest = max(highest, RANK_HIERARCHY.get(display, 0))
+
+    return highest
+
+
+def get_rank_level(rank_name: str) -> int:
+    """Return the hierarchy level for a rank name."""
+    return RANK_HIERARCHY.get(rank_name, 0)
 
 
 def load_rank_message():
@@ -862,7 +895,6 @@ async def clear_rank_roles(member: discord.Member):
 RANK_CHOICES = [
     app_commands.Choice(name="🎖 Chief Commander",        value="Chief Commander"),
     app_commands.Choice(name="🎖 Deputy Commander",       value="Deputy Commander"),
-    app_commands.Choice(name="🕵 Internal Affairs",       value="Internal Affairs"),
     app_commands.Choice(name="👮 Captain",                value="Captain"),
     app_commands.Choice(name="👮 Lieutenant",             value="Lieutenant"),
     app_commands.Choice(name="👮 Sergeant",               value="Sergeant"),
@@ -896,14 +928,59 @@ async def officer(interaction: discord.Interaction, member: discord.Member):
 @app_commands.describe(member="Member to promote", rank="Rank to promote to")
 @app_commands.choices(rank=RANK_CHOICES)
 async def promote(interaction: discord.Interaction, member: discord.Member, rank: app_commands.Choice[str]):
+
     if not high_command_check(interaction.user):
-        return await interaction.response.send_message("❌ No permission.", ephemeral=True)
+        return await interaction.response.send_message(
+            "❌ No permission.",
+            ephemeral=True
+        )
+
+    # Cannot promote yourself
+    if member.id == interaction.user.id:
+        return await interaction.response.send_message(
+            "❌ You cannot promote yourself.",
+            ephemeral=True
+        )
+
+    actor_level = get_member_rank_level(interaction.user)
+    target_level = get_member_rank_level(member)
+    new_rank_level = get_rank_level(rank.value)
+
+    # Cannot promote someone equal/higher than yourself
+    if target_level >= actor_level:
+        return await interaction.response.send_message(
+            "❌ You cannot promote someone equal to or higher than your rank.",
+            ephemeral=True
+        )
+
+    # Promote must go UP
+    if new_rank_level <= target_level:
+        return await interaction.response.send_message(
+            "❌ Promotions must move a member to a HIGHER rank.",
+            ephemeral=True
+        )
+
+    # Cannot promote ABOVE yourself
+    if new_rank_level >= actor_level:
+        return await interaction.response.send_message(
+            "❌ You cannot promote someone to your rank or higher.",
+            ephemeral=True
+        )
+
     target_role = get_rank_role(interaction.guild, rank.value)
+
     if not target_role:
-        return await interaction.response.send_message(f"❌ Role for **{rank.name}** not found in this server.", ephemeral=True)
+        return await interaction.response.send_message(
+            f"❌ Role for **{rank.name}** not found.",
+            ephemeral=True
+        )
+
     await clear_rank_roles(member)
     await member.add_roles(target_role)
+
     await update_member_tag(member)
+    await update_rank_board(interaction.guild)
+
     await interaction.response.send_message(
         f"⬆️ {member.mention} has been promoted to **{rank.name}** by {interaction.user.mention}."
     )
@@ -913,14 +990,52 @@ async def promote(interaction: discord.Interaction, member: discord.Member, rank
 @app_commands.describe(member="Member to demote", rank="Rank to demote to")
 @app_commands.choices(rank=RANK_CHOICES)
 async def demote(interaction: discord.Interaction, member: discord.Member, rank: app_commands.Choice[str]):
+
     if not high_command_check(interaction.user):
-        return await interaction.response.send_message("❌ No permission.", ephemeral=True)
+        return await interaction.response.send_message(
+            "❌ No permission.",
+            ephemeral=True
+        )
+
+    # Cannot demote yourself
+    if member.id == interaction.user.id:
+        return await interaction.response.send_message(
+            "❌ You cannot demote yourself.",
+            ephemeral=True
+        )
+
+    actor_level = get_member_rank_level(interaction.user)
+    target_level = get_member_rank_level(member)
+    new_rank_level = get_rank_level(rank.value)
+
+    # Cannot demote someone equal/higher than yourself
+    if target_level >= actor_level:
+        return await interaction.response.send_message(
+            "❌ You cannot demote someone equal to or higher than your rank.",
+            ephemeral=True
+        )
+
+    # Demotion must go DOWN
+    if new_rank_level >= target_level:
+        return await interaction.response.send_message(
+            "❌ Demotions must move a member to a LOWER rank.",
+            ephemeral=True
+        )
+
     target_role = get_rank_role(interaction.guild, rank.value)
+
     if not target_role:
-        return await interaction.response.send_message(f"❌ Role for **{rank.name}** not found in this server.", ephemeral=True)
+        return await interaction.response.send_message(
+            f"❌ Role for **{rank.name}** not found.",
+            ephemeral=True
+        )
+
     await clear_rank_roles(member)
     await member.add_roles(target_role)
+
     await update_member_tag(member)
+    await update_rank_board(interaction.guild)
+
     await interaction.response.send_message(
         f"⬇️ {member.mention} has been demoted to **{rank.name}** by {interaction.user.mention}."
     )
