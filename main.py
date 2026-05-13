@@ -109,7 +109,6 @@ def build_rank_embed(guild: discord.Guild) -> discord.Embed:
 
             if role:
 
-                # FORCE fresh member scan from guild members
                 fresh_members = [
                     m for m in guild.members
                     if role in m.roles
@@ -120,11 +119,17 @@ def build_rank_embed(guild: discord.Guild) -> discord.Embed:
                     key=lambda m: m.joined_at or discord.utils.utcnow()
                 )
 
-                members = [m.mention for m in sorted_members]
+                members = [m.display_name for m in sorted_members]
+
+            member_text = "\n".join(members)
+
+            # Discord embed field value limit
+            if len(member_text) > 1000:
+                member_text = member_text[:1000] + "\n..."
 
             embed.add_field(
                 name=f"{matched_name} ({len(members)})",
-                value="\n".join(members) if members else "*None*",
+                value=member_text if members else "*None*",
                 inline=False
             )
 
@@ -167,29 +172,23 @@ async def update_rank_board(guild: discord.Guild):
 
     data = load_rank_message()
 
-    print(f"[DEBUG] Rank message data: {data}")
-
     channel_id = data.get("channel_id")
     message_id = data.get("message_id")
 
     if not channel_id or not message_id:
-        print("[DEBUG] No saved rank board.")
+        print("[DEBUG] No saved rank board message.")
         return
 
     try:
-        # FETCH channel instead of cache lookup
         channel = await bot.fetch_channel(int(channel_id))
-
-        if not channel:
-            print("[DEBUG] Channel not found.")
-            return
-
-        # FETCH message directly
         message = await channel.fetch_message(int(message_id))
 
-        print("[DEBUG] Found rank board message.")
+        # Refresh member cache
+        await guild.chunk(cache=True)
 
         new_embed = build_rank_embed(guild)
+
+        print(f"[DEBUG] Total embed fields: {len(new_embed.fields)}")
 
         await message.edit(embed=new_embed)
 
@@ -197,7 +196,7 @@ async def update_rank_board(guild: discord.Guild):
 
     except Exception as e:
         print(f"[RANK BOARD ERROR] {e}")
-
+        
 intents = discord.Intents.all()
 
 intents.members = True
@@ -486,25 +485,6 @@ class ApplyButtonView(discord.ui.View):
             ephemeral=True
         )
 
-
-@bot.event
-async def on_member_update(before: discord.Member, after: discord.Member):
-
-    print(f"[DEBUG] Member update triggered for {after}")
-
-    before_role_ids = {r.id for r in before.roles}
-    after_role_ids = {r.id for r in after.roles}
-
-    if before_role_ids == after_role_ids:
-        return
-
-    print("[DEBUG] Roles changed.")
-
-    await update_member_tag(after)
-
-    await asyncio.sleep(1)
-
-    await update_rank_board(after.guild)
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
@@ -855,14 +835,9 @@ async def promote(
 
     await clear_rank_roles(member)
 
-    await asyncio.sleep(1)
-
     print(f"[DEBUG] Adding role: {target_role.name}")
 
     await member.add_roles(target_role)
-
-    await asyncio.sleep(2)
-
     print("[DEBUG] Updating nickname tag...")
 
     await update_member_tag(member)
@@ -905,8 +880,6 @@ async def demote(
     await member.add_roles(target_role)
 
     await update_member_tag(member)
-
-    await asyncio.sleep(1)
 
     await update_rank_board(interaction.guild)
 
