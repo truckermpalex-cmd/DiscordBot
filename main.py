@@ -1458,20 +1458,20 @@ async def disciplinary_action(
     })
 
     try:
-    save_disciplinary_log(log)
+        save_disciplinary_log(log)
 
-    await interaction.followup.send(
-        "✅ Disciplinary action posted and officer notified.",
-        ephemeral=True
-    )
+        await interaction.followup.send(
+            "✅ Disciplinary action posted and officer notified.",
+            ephemeral=True
+        )
 
-except Exception as e:
-    print(f"[DISCIPLINARY ERROR] {e}")
+    except Exception as e:
+        print(f"[DISCIPLINARY ERROR] {e}")
 
-    await interaction.followup.send(
-        f"❌ Error: {e}",
-        ephemeral=True
-    )
+        await interaction.followup.send(
+            f"❌ Error: {e}",
+            ephemeral=True
+        )
 
 
 @bot.tree.command(name="officer_conduct", description="View disciplinary history for an officer", guild=GUILD)
