@@ -4,8 +4,10 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+from discord.ext import tasks
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
+os.makedirs("bot", exist_ok=True)
 GUILD_ID = 1503750714273304649
 GUILD = discord.Object(id=GUILD_ID)
 
@@ -13,8 +15,7 @@ RECRUITMENT_CATEGORY_NAME = "📋 RECRUITMENT DIVISION"
 ACTIVE_APPS_CATEGORY_NAME = "📥 ACTIVE APPLICATIONS"
 OLD_APPS_CATEGORY_NAME = "🗂 OLD APPLICATIONS"
 APPLICATIONS_CHANNEL_NAME = "📥│applications"
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-RANK_MESSAGE_FILE = os.path.join(BASE_DIR, "rank_message.json")
+RANK_MESSAGE_FILE = "bot/rank_message.json"
 RANK_PROMOTION_FILE = "bot/rank_promotion_order.json"
 OLD_TICKETS_CATEGORY_NAME = "🗂 OLD TICKETS"
 GENERAL_CHAT_NAME = "💬│general-chat"
@@ -152,7 +153,7 @@ def build_rank_embed(guild: discord.Guild) -> discord.Embed:
                 ordered_ids = promo_data.get(matched_name, [])
                 untracked = [m for m in role.members if str(m.id) not in ordered_ids]
                 tracked = [role_members[uid] for uid in ordered_ids if uid in role_members]
-                members = [m.mention for m in untracked + tracked]
+                members = [m.mention for m in tracked + untracked]
             embed.add_field(
                 name=f"{matched_name} ({len(members)})",
                 value="\n".join(members) if members else "*None*",
@@ -163,32 +164,36 @@ def build_rank_embed(guild: discord.Guild) -> discord.Embed:
 
 
 async def update_member_tag(member: discord.Member):
-    # Find the tag for their highest rank role
+
+    highest_level = 0
     new_tag = None
-    for _display, role_names, tag in ALL_RANKS:
+
+    for display, role_names, tag in ALL_RANKS:
+
+        level = RANK_HIERARCHY.get(display, 0)
+
         for role_name in role_names:
             if any(r.name == role_name for r in member.roles):
-                new_tag = tag
-                break
-        if new_tag:
-            break
+                if level > highest_level:
+                    highest_level = level
+                    new_tag = tag
 
-    # Strip all existing tags from their current display name
     base = member.nick if member.nick else member.name
+
     for t in ALL_TAGS:
         base = base.replace(f" {t}", "").replace(t, "").strip()
 
     new_nick = f"{base} {new_tag}" if new_tag else base
 
-    # Don't edit if nothing changed
     current = member.nick or ""
+
     if new_nick == current or (not member.nick and new_nick == member.name):
         return
 
     try:
         await member.edit(nick=new_nick)
-    except discord.Forbidden:
-        pass  # Can't edit server owner or someone with higher perms
+    except (discord.Forbidden, discord.HTTPException):
+        pass
 
 
 async def update_rank_board(guild: discord.Guild):
@@ -497,6 +502,10 @@ async def on_ready():
 
     print(f"Logged in as {bot.user}")
 
+    # Start LOA expiry checker
+    if not check_expired_loas.is_running():
+        check_expired_loas.start()
+
     try:
 
         bot.add_view(ApplyButtonView())
@@ -504,6 +513,22 @@ async def on_ready():
         bot.add_view(VerifyButtonView())
         bot.add_view(SupportTicketView())
         bot.add_view(TicketCloseView())
+
+        # Restore pending LOA approval buttons
+        loa_data = load_loa_requests()
+
+        for key, value in loa_data.items():
+
+            if not key.startswith("pending_"):
+                continue
+
+            bot.add_view(
+                LOAApprovalView(
+                    value["member_id"],
+                    value["duration_days"],
+                    value["reason"]
+                )
+            )
 
         # =====================================================
         # RESTORE DISCIPLINARY VIEWS
@@ -581,8 +606,107 @@ async def on_member_join(member: discord.Member):
             send_messages=False,
             read_message_history=True
         )
+# =========================================================
+# LOA REQUEST COMMAND
+# =========================================================
 
+@bot.tree.command(
+    name="request_loa",
+    description="Request a Leave of Absence",
+    guild=GUILD
+)
+@app_commands.describe(
+    duration_days="How many days you need LOA for",
+    reason="Reason for your LOA"
+)
+async def request_loa(
+    interaction: discord.Interaction,
+    duration_days: int,
+    reason: str
+):
+    # Prevent duplicate active LOAs
+    if member_has_active_loa(interaction.user.id):
+        return await interaction.response.send_message(
+            "❌ You already have an active LOA.",
+            ephemeral=True
+        )
 
+    # Find LOA requests channel
+    loa_channel = discord.utils.find(
+        lambda c: "loa" in c.name.lower(),
+        interaction.guild.text_channels
+    )
+
+    if not loa_channel:
+        return await interaction.response.send_message(
+            "❌ Could not find an LOA requests channel.",
+            ephemeral=True
+        )
+
+    import datetime
+
+    start = int(datetime.datetime.utcnow().timestamp())
+    end = start + (duration_days * 86400)
+
+    embed = discord.Embed(
+        title="🟡 LEAVE OF ABSENCE REQUEST",
+        color=discord.Color.gold()
+    )
+
+    embed.add_field(
+        name="👤 Officer",
+        value=f"{interaction.user.mention} (`{interaction.user}`)",
+        inline=False
+    )
+
+    embed.add_field(
+        name="📅 Duration",
+        value=f"{duration_days} day(s)",
+        inline=True
+    )
+
+    embed.add_field(
+        name="📆 Return Date",
+        value=f"<t:{end}:D>",
+        inline=True
+    )
+
+    embed.add_field(
+        name="📝 Reason",
+        value=reason,
+        inline=False
+    )
+
+    embed.set_footer(
+    text="Awaiting High Command approval"
+    )
+
+    view = LOAApprovalView(
+        interaction.user.id,
+        duration_days,
+    reason
+    )
+
+    msg = await loa_channel.send(
+       embed=embed,
+       view=view
+    )
+
+    data = load_loa_requests()
+
+    data[f"pending_{msg.id}"] = {
+        "member_id": interaction.user.id,
+        "duration_days": duration_days,
+        "reason": reason
+    }
+
+    save_loa_requests(data)
+
+    await interaction.response.send_message(
+        "✅ LOA request submitted.",
+        ephemeral=True
+    )
+    
 # =========================================================
 # SLASH COMMANDS
 # =========================================================
@@ -1101,6 +1225,7 @@ async def fire(interaction: discord.Interaction, member: discord.Member, reason:
         color=discord.Color.red()
     )
     embed.add_field(name="Reason", value=reason, inline=False)
+
     await interaction.response.send_message(embed=embed)
     try:
         await member.send(
@@ -1428,32 +1553,6 @@ def save_recruitment_message(data: dict):
     with open(RECRUITMENT_MESSAGE_FILE, "w") as f:
         json.dump(data, f)
 
-
-@bot.event
-async def on_message(message: discord.Message):
-    if message.author.bot:
-        return
-    if not message.guild or message.guild.id != GUILD_ID:
-        return
-    if message.channel.name != GENERAL_CHAT_NAME:
-        await bot.process_commands(message)
-        return
-
-    data = load_recruitment_message()
-    old_msg_id = data.get("message_id")
-    if old_msg_id:
-        try:
-            old_msg = await message.channel.fetch_message(old_msg_id)
-            await old_msg.delete()
-        except (discord.NotFound, discord.Forbidden):
-            pass
-
-    new_msg = await message.channel.send(embed=build_recruitment_embed())
-    save_recruitment_message({"message_id": new_msg.id, "channel_id": message.channel.id})
-    await bot.process_commands(message)
-
-
-
 @bot.tree.command(name="hrt_news", description="Post a HRT news announcement", guild=GUILD)
 @app_commands.describe(title="Title of the news post", news="The news content to announce")
 async def hrt_news(interaction: discord.Interaction, title: str, news: str):
@@ -1573,26 +1672,13 @@ async def officer_report(
 import uuid
 import datetime
 
-DISCIPLINARY_LOG_FILE = "bot/disciplinary_log.json"
+LOA_REQUESTS_FILE = "bot/loa_requests.json"
 PENDING_CASES_FILE = "bot/pending_cases.json"
 
 
 # =========================================================
 # FILE HELPERS
 # =========================================================
-
-def load_disciplinary_log():
-    try:
-        with open(DISCIPLINARY_LOG_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {}
-
-
-def save_disciplinary_log(data):
-    with open(DISCIPLINARY_LOG_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
 
 def load_pending_cases():
     try:
@@ -1607,15 +1693,353 @@ def save_pending_cases(data):
         json.dump(data, f, indent=4)
 
 
-def ia_check(user: discord.Member):
-    return high_command_check(user) or any(
-        r.name == "🕵 Internal Affairs" for r in user.roles
+# =========================================================
+# LOA STORAGE HELPERS
+# =========================================================
+
+def load_loa_requests():
+    try:
+        with open(LOA_REQUESTS_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_loa_requests(data):
+    with open(LOA_REQUESTS_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+def member_has_active_loa(member_id: int):
+    data = load_loa_requests()
+
+    loa = data.get(str(member_id))
+
+    if not loa:
+        return False
+
+    return loa.get("active", False)
+
+
+# =========================================================
+# LOA EXPIRY TASK
+# =========================================================
+
+@bot.tree.command(
+    name="end_loa",
+    description="End an officer's LOA early",
+    guild=GUILD
+)
+@app_commands.describe(member="Officer to remove from LOA")
+async def end_loa(interaction: discord.Interaction, member: discord.Member):
+
+    if not high_command_check(interaction.user):
+        return await interaction.response.send_message(
+            "❌ Only High Command can end LOAs.",
+            ephemeral=True
+        )
+
+    data = load_loa_requests()
+
+    loa = data.get(str(member.id))
+
+    if not loa or not loa.get("active"):
+        return await interaction.response.send_message(
+            "❌ That member does not have an active LOA.",
+            ephemeral=True
+        )
+
+    loa_role = discord.utils.find(
+        lambda r: "loa" in r.name.lower(),
+        interaction.guild.roles
     )
 
+    if loa_role and loa_role in member.roles:
+        await member.remove_roles(loa_role)
+
+    loa["active"] = False
+
+    save_loa_requests(data)
+
+    embed = discord.Embed(
+        title="✅ LOA ENDED",
+        color=discord.Color.green()
+    )
+
+    embed.add_field(
+        name="👤 Officer",
+        value=member.mention,
+        inline=False
+    )
+
+    embed.add_field(
+        name="Ended By",
+        value=interaction.user.mention,
+        inline=False
+    )
+
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(
+    name="active_loas",
+    description="View all active LOAs",
+    guild=GUILD
+)
+async def active_loas(interaction: discord.Interaction):
+
+    if not high_command_check(interaction.user):
+        return await interaction.response.send_message(
+            "❌ No permission.",
+            ephemeral=True
+        )
+
+    data = load_loa_requests()
+
+    embed = discord.Embed(
+        title="📅 ACTIVE LOAS",
+        color=discord.Color.blurple()
+    )
+
+    found = False
+
+    for uid, loa in data.items():
+
+        if not uid.isdigit():
+            continue
+
+        if not loa.get("active"):
+            continue
+
+        found = True
+
+        member = interaction.guild.get_member(int(uid))
+
+        member_name = member.mention if member else f"Unknown User ({uid})"
+
+        embed.add_field(
+            name=member_name,
+            value=(
+    f"Reason: {loa.get('reason', 'No reason provided')}\n"
+    f"Ends: <t:{loa.get('end', 0)}:F>"
+),
+            inline=False
+        )
+
+    await interaction.response.send_message(embed=embed)
+
+@tasks.loop(minutes=30)
+async def check_expired_loas():
+
+    data = load_loa_requests()
+    now = int(datetime.datetime.utcnow().timestamp())
+
+    guild = bot.get_guild(GUILD_ID)
+
+    if not guild:
+        return
+
+    changed = False
+
+    for uid, loa in list(data.items()):
+
+        if loa.get("active") and now >= loa["end"]:
+
+            member = guild.get_member(int(uid))
+
+            if member:
+
+                loa_role = discord.utils.find(
+                    lambda r: "loa" in r.name.lower(),
+                    guild.roles
+                )
+
+                if loa_role and loa_role in member.roles:
+                    await member.remove_roles(loa_role)
+
+            loa["active"] = False
+            changed = True
+
+    if changed:
+        save_loa_requests(data)
+
+
 
 # =========================================================
-# APPROVAL VIEW
+# LOA APPROVAL VIEW
 # =========================================================
+
+class LOAApprovalView(discord.ui.View):
+
+    def __init__(self, member_id: int, duration_days: int, reason: str):
+        super().__init__(timeout=None)
+        self.member_id = member_id
+        self.duration_days = duration_days
+        self.reason = reason
+
+    @discord.ui.button(
+        label="✅ Approve",
+        style=discord.ButtonStyle.success,
+        custom_id="loa_approve"
+    )
+    async def approve_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        if not high_command_check(interaction.user):
+            return await interaction.response.send_message(
+                "❌ Only High Command can approve LOAs.",
+                ephemeral=True
+            )
+
+        guild = interaction.guild
+        member = guild.get_member(self.member_id)
+
+        if not member:
+            return await interaction.response.send_message(
+                "❌ Member not found.",
+                ephemeral=True
+            )
+
+        loa_role = discord.utils.find(
+            lambda r: "loa" in r.name.lower(),
+            guild.roles
+        )
+
+        if loa_role:
+            await member.add_roles(loa_role)
+
+        start = int(datetime.datetime.utcnow().timestamp())
+        end = start + (self.duration_days * 86400)
+
+        data = load_loa_requests()
+
+        for key in list(data.keys()):
+            if key.startswith("pending_"):
+                pending = data[key]
+
+                if pending.get("member_id") == member.id:
+                    del data[key]
+
+        data[str(member.id)] = {
+            "active": True,
+            "reason": self.reason,
+            "approved_by": interaction.user.id,
+            "start": start,
+            "end": end
+        }
+
+        save_loa_requests(data)
+
+        approved_embed = discord.Embed(
+            title="✅ LOA APPROVED",
+            color=discord.Color.green()
+        )
+
+        approved_embed.add_field(
+            name="👤 Officer",
+            value=member.mention,
+            inline=False
+        )
+
+        approved_embed.add_field(
+            name="📅 Duration",
+            value=f"{self.duration_days} day(s)",
+            inline=True
+        )
+
+        approved_embed.add_field(
+            name="📆 Return Date",
+            value=f"<t:{end}:D>",
+            inline=True
+        )
+
+        approved_embed.add_field(
+            name="✅ Approved By",
+            value=interaction.user.mention,
+            inline=False
+        )
+
+        approved_embed.add_field(
+            name="📝 Reason",
+            value=self.reason,
+            inline=False
+        )
+
+        await interaction.message.edit(
+            embed=approved_embed,
+            view=None
+        )
+
+        await interaction.response.send_message(
+            f"✅ Approved LOA for {member.mention}.",
+            ephemeral=True
+        )
+
+    @discord.ui.button(
+        label="❌ Deny",
+        style=discord.ButtonStyle.danger,
+        custom_id="loa_deny"
+    )
+    async def deny_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+
+        if not high_command_check(interaction.user):
+            return await interaction.response.send_message(
+                "❌ Only High Command can deny LOAs.",
+                ephemeral=True
+            )
+
+        guild = interaction.guild
+        member = guild.get_member(self.member_id)
+
+        denied_embed = discord.Embed(
+            title="❌ LOA DENIED",
+            color=discord.Color.red()
+        )
+
+        denied_embed.add_field(
+            name="Officer",
+            value=f"<@{self.member_id}>",
+            inline=False
+        )
+
+        denied_embed.add_field(
+            name="Denied By",
+            value=interaction.user.mention,
+            inline=False
+        )
+
+        denied_embed.add_field(
+            name="Reason",
+            value=self.reason,
+            inline=False
+        )
+
+        data = load_loa_requests()
+
+        for key in list(data.keys()):
+            if key.startswith("pending_"):
+                pending = data[key]
+
+                if pending.get("member_id") == self.member_id:
+                    del data[key]
+
+        save_loa_requests(data)
+
+        await interaction.message.edit(
+            embed=denied_embed,
+            view=None
+        )
+
+        await interaction.response.send_message(
+            "❌ LOA denied.",
+            ephemeral=True
+        )
 
 class DisciplinaryApprovalView(discord.ui.View):
 
@@ -2080,4 +2504,7 @@ async def main():
     async with bot:
         await bot.start(TOKEN)
 
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except Exception as e:
+    print(f"FATAL ERROR: {e}")
