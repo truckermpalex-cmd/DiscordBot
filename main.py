@@ -488,23 +488,13 @@ class ApplyButtonView(discord.ui.View):
             ephemeral=True
         )
 
+
 @bot.event
 async def on_ready():
+
     print(f"Logged in as {bot.user}")
 
     try:
-
-        # Persistent Views
-        bot.add_view(
-            DisciplinaryApprovalView(
-                "IA-0000",
-                0,
-                "",
-                "",
-                "",
-                0
-            )
-        )
 
         bot.add_view(ApplyButtonView())
         bot.add_view(ApplicationDecisionView(None))
@@ -512,12 +502,32 @@ async def on_ready():
         bot.add_view(SupportTicketView())
         bot.add_view(TicketCloseView())
 
+        # =====================================================
+        # RESTORE DISCIPLINARY VIEWS
+        # =====================================================
+
+        pending = load_pending_cases()
+
+        for case_id, case in pending.items():
+
+            bot.add_view(
+                DisciplinaryApprovalView(
+                    case_id=case_id,
+                    subject_id=case["subject_id"],
+                    violation=case["violation"],
+                    action_value=case["action"],
+                    notes=case["notes"],
+                    issuer_id=case["issuer_id"]
+                )
+            )
+
         synced = await bot.tree.sync(guild=GUILD)
 
-        print(f"Synced {len(synced)} slash commands to guild.")
+        print(f"Synced {len(synced)} slash commands.")
 
     except Exception as e:
         print(e)
+
 
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
@@ -1538,26 +1548,44 @@ async def officer_report(
 # DISCIPLINARY APPROVAL SYSTEM
 # =========================================================
 
-import random
+import uuid
 import datetime
 
 DISCIPLINARY_LOG_FILE = "bot/disciplinary_log.json"
+PENDING_CASES_FILE = "bot/pending_cases.json"
 
 
-def load_disciplinary_log() -> dict:
+# =========================================================
+# FILE HELPERS
+# =========================================================
+
+def load_disciplinary_log():
     try:
         with open(DISCIPLINARY_LOG_FILE, "r") as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except:
         return {}
 
 
-def save_disciplinary_log(data: dict):
+def save_disciplinary_log(data):
     with open(DISCIPLINARY_LOG_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
 
-def ia_check(user: discord.Member) -> bool:
+def load_pending_cases():
+    try:
+        with open(PENDING_CASES_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return {}
+
+
+def save_pending_cases(data):
+    with open(PENDING_CASES_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+def ia_check(user: discord.Member):
     return high_command_check(user) or any(
         r.name == "🕵 Internal Affairs" for r in user.roles
     )
@@ -1587,36 +1615,16 @@ class DisciplinaryApprovalView(discord.ui.View):
         self.notes = notes
         self.issuer_id = issuer_id
 
-        approve_button = discord.ui.Button(
-            label="✅ Approve",
-            style=discord.ButtonStyle.success,
-            custom_id=f"disciplinary_approve_{case_id}"
-        )
-
-        deny_button = discord.ui.Button(
-            label="❌ Deny",
-            style=discord.ButtonStyle.danger,
-            custom_id=f"disciplinary_deny_{case_id}"
-        )
-
-        approve_button.callback = self.approve_callback
-        deny_button.callback = self.deny_callback
-
-        self.add_item(approve_button)
-        self.add_item(deny_button)
-
-    async def approve_callback(self, interaction: discord.Interaction):
+    @discord.ui.button(
+        label="✅ Approve",
+        style=discord.ButtonStyle.success,
+        custom_id="disciplinary_approve"
+    )
+    async def approve_button(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         if not high_command_check(interaction.user):
             return await interaction.response.send_message(
                 "❌ Only High Command can approve disciplinary actions.",
-                ephemeral=True
-            )
-
-        # Prevent double approvals
-        if all(item.disabled for item in self.children):
-            return await interaction.response.send_message(
-                "⚠️ This request has already been handled.",
                 ephemeral=True
             )
 
@@ -1629,20 +1637,12 @@ class DisciplinaryApprovalView(discord.ui.View):
                 ephemeral=True
             )
 
-        # =====================================================
-        # FINALIZED EMBED
-        # =====================================================
-
         embed = discord.Embed(
             title="⚖️ INTERNAL AFFAIRS — DISCIPLINARY ACTION",
             color=discord.Color.red()
         )
 
-        embed.add_field(
-            name="📁 Case ID",
-            value=self.case_id,
-            inline=True
-        )
+        embed.add_field(name="📁 Case ID", value=self.case_id, inline=True)
 
         embed.add_field(
             name="👤 Subject Officer",
@@ -1688,10 +1688,6 @@ class DisciplinaryApprovalView(discord.ui.View):
 
         embed.set_footer(text="HRT Internal Affairs • Finalized")
 
-        # =====================================================
-        # SEND TO IA LOG CHANNEL
-        # =====================================================
-
         ia_log = discord.utils.find(
             lambda c: "ia-log" in c.name.lower(),
             guild.text_channels
@@ -1701,29 +1697,6 @@ class DisciplinaryApprovalView(discord.ui.View):
             await ia_log.send(embed=embed)
         else:
             await interaction.channel.send(embed=embed)
-
-        # =====================================================
-        # DM OFFICER
-        # =====================================================
-
-        try:
-
-            dm_embed = discord.Embed(
-                title="⚖️ Disciplinary Action Issued",
-                description=(
-                    f"You have received a disciplinary action in **{guild.name}**.\n\n"
-                    f"📁 **Case ID:** {self.case_id}\n"
-                    f"⚖️ **Action:** {self.action_value}\n"
-                    f"❌ **Violation:** {self.violation}\n"
-                    f"📝 **Notes:** {self.notes}"
-                ),
-                color=discord.Color.red()
-            )
-
-            await subject.send(embed=dm_embed)
-
-        except discord.Forbidden:
-            pass
 
         # =====================================================
         # SAVE LOG
@@ -1749,20 +1722,39 @@ class DisciplinaryApprovalView(discord.ui.View):
         save_disciplinary_log(log)
 
         # =====================================================
+        # REMOVE PENDING CASE
+        # =====================================================
+
+        pending = load_pending_cases()
+
+        if self.case_id in pending:
+            del pending[self.case_id]
+
+        save_pending_cases(pending)
+
+        # =====================================================
         # DISABLE BUTTONS
         # =====================================================
 
         for item in self.children:
             item.disabled = True
 
-        await interaction.message.edit(view=self)
+        try:
+            await interaction.message.edit(view=self)
+        except:
+            pass
 
         await interaction.response.send_message(
-            "✅ Disciplinary action approved and finalized.",
+            "✅ Disciplinary action approved.",
             ephemeral=True
         )
 
-    async def deny_callback(self, interaction: discord.Interaction):
+    @discord.ui.button(
+        label="❌ Deny",
+        style=discord.ButtonStyle.danger,
+        custom_id="disciplinary_deny"
+    )
+    async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         if not high_command_check(interaction.user):
             return await interaction.response.send_message(
@@ -1770,18 +1762,18 @@ class DisciplinaryApprovalView(discord.ui.View):
                 ephemeral=True
             )
 
-        # Prevent double handling
-        if all(item.disabled for item in self.children):
-            return await interaction.response.send_message(
-                "⚠️ This request has already been handled.",
-                ephemeral=True
-            )
+        pending = load_pending_cases()
+
+        if self.case_id in pending:
+            del pending[self.case_id]
+
+        save_pending_cases(pending)
 
         denied_embed = discord.Embed(
             title="❌ DISCIPLINARY REQUEST DENIED",
             description=(
                 f"📁 **Case ID:** {self.case_id}\n\n"
-                f"This disciplinary request was denied by {interaction.user.mention}."
+                f"Denied by {interaction.user.mention}"
             ),
             color=discord.Color.dark_red()
         )
@@ -1791,7 +1783,10 @@ class DisciplinaryApprovalView(discord.ui.View):
         for item in self.children:
             item.disabled = True
 
-        await interaction.message.edit(view=self)
+        try:
+            await interaction.message.edit(view=self)
+        except:
+            pass
 
         await interaction.response.send_message(
             "❌ Disciplinary request denied.",
@@ -1805,13 +1800,13 @@ class DisciplinaryApprovalView(discord.ui.View):
 
 @bot.tree.command(
     name="disciplinary_action",
-    description="Submit a disciplinary request for approval",
+    description="Submit a disciplinary request",
     guild=GUILD
 )
 @app_commands.describe(
     subject="Officer receiving the disciplinary action",
-    violation="Rule or conduct violation committed",
-    action="Action being requested",
+    violation="Rule violated",
+    action="Requested action",
     notes="Additional notes"
 )
 @app_commands.choices(action=[
@@ -1835,30 +1830,15 @@ async def disciplinary_action(
             ephemeral=True
         )
 
-    # =====================================================
-    # CREATE CASE ID
-    # =====================================================
-
-    case_id = f"IA-{random.randint(1000, 9999)}"
-
-    # =====================================================
-    # REQUEST EMBED
-    # =====================================================
+    case_id = f"IA-{uuid.uuid4().hex[:6].upper()}"
 
     embed = discord.Embed(
         title="⚠️ DISCIPLINARY REQUEST",
-        description=(
-            "A disciplinary action request has been submitted "
-            "and is awaiting High Command approval."
-        ),
+        description="Awaiting High Command approval.",
         color=discord.Color.orange()
     )
 
-    embed.add_field(
-        name="📁 Case ID",
-        value=case_id,
-        inline=True
-    )
+    embed.add_field(name="📁 Case ID", value=case_id, inline=True)
 
     embed.add_field(
         name="👤 Subject Officer",
@@ -1892,43 +1872,39 @@ async def disciplinary_action(
 
     embed.set_footer(text="Awaiting High Command Approval")
 
-    # =====================================================
-    # VIEW
-    # =====================================================
-
     view = DisciplinaryApprovalView(
-        case_id=case_id,
-        subject_id=subject.id,
-        violation=violation,
-        action_value=action.value,
-        notes=notes,
-        issuer_id=interaction.user.id
+        case_id,
+        subject.id,
+        violation,
+        action.value,
+        notes,
+        interaction.user.id
     )
 
-    await interaction.channel.send(embed=embed, view=view)
+    msg = await interaction.channel.send(embed=embed, view=view)
+
+    # =====================================================
+    # SAVE PENDING CASE
+    # =====================================================
+
+    pending = load_pending_cases()
+
+    pending[case_id] = {
+        "message_id": msg.id,
+        "channel_id": msg.channel.id,
+        "subject_id": subject.id,
+        "violation": violation,
+        "action": action.value,
+        "notes": notes,
+        "issuer_id": interaction.user.id
+    }
+
+    save_pending_cases(pending)
 
     await interaction.response.send_message(
-        f"✅ Disciplinary request submitted.\n📁 Case ID: `{case_id}`",
+        f"✅ Disciplinary request submitted.\n📁 `{case_id}`",
         ephemeral=True
     )
-
-
-# =========================================================
-# ADD THIS TO on_ready()
-# =========================================================
-
-# ADD THIS INSIDE YOUR on_ready EVENT:
-
-# bot.add_view(
-#     DisciplinaryApprovalView(
-#         "IA-0000",
-#         0,
-#         "",
-#         "",
-#         "",
-#         0
-#     )
-# )
 @bot.tree.command(name="officer_lookup", description="View disciplinary history for an officer", guild=GUILD)
 @app_commands.describe(member="Officer to look up")
 async def officer_lookup(interaction: discord.Interaction, member: discord.Member):
