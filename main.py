@@ -832,30 +832,65 @@ async def demote(
 
 @bot.tree.command(name="fire", description="Remove a member from HRT", guild=GUILD)
 @app_commands.describe(member="Member to fire", reason="Reason for termination")
-async def fire(interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
-    if not high_command_check(interaction.user):
-        return await interaction.response.send_message("❌ No permission.", ephemeral=True)
-    await clear_rank_roles(member)
+async def fire(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    reason: str = "No reason provided"
+):
 
-    await asyncio.sleep(1)
+    await interaction.response.defer()
 
-    await update_member_tag(member)
- 
-    await update_rank_board(interaction.guild)
-    embed = discord.Embed(
-        title="🚫 Member Terminated",
-        description=f"{member.mention} has been **fired** from HRT by {interaction.user.mention}.",
-        color=discord.Color.red()
-    )
-    embed.add_field(name="Reason", value=reason, inline=False)
-    await interaction.response.send_message(embed=embed)
     try:
-        await member.send(
-            f"🚫 You have been **terminated** from **HRT** by {interaction.user.display_name}.\n"
-            f"**Reason:** {reason}"
+
+        if not high_command_check(interaction.user):
+            return await interaction.followup.send(
+                "❌ No permission.",
+                ephemeral=True
+            )
+
+        await clear_rank_roles(member)
+
+        await asyncio.sleep(1)
+
+        await update_member_tag(member)
+
+        await update_rank_board(interaction.guild)
+
+        embed = discord.Embed(
+            title="🚫 Member Terminated",
+            description=(
+                f"{member.mention} has been fired from HRT "
+                f"by {interaction.user.mention}."
+            ),
+            color=discord.Color.red()
         )
-    except discord.Forbidden:
-        pass
+
+        embed.add_field(
+            name="Reason",
+            value=reason,
+            inline=False
+        )
+
+        await interaction.followup.send(embed=embed)
+
+        try:
+            await member.send(
+                f"🚫 You have been terminated from HRT by "
+                f"{interaction.user.display_name}.\n"
+                f"Reason: {reason}"
+            )
+
+        except discord.Forbidden:
+            pass
+
+    except Exception as e:
+
+        print(f"[FIRE COMMAND ERROR] {e}")
+
+        await interaction.followup.send(
+            f"❌ Error: {e}",
+            ephemeral=True
+        )
 
 
 @bot.tree.command(name="retire", description="Retire a member and give them the Retired role", guild=GUILD)
