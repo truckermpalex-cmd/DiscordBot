@@ -403,7 +403,6 @@ class ApplicationDecisionView(discord.ui.View):
                 "⚠️ Applicant could not be found.",
                 ephemeral=True
             )
-        )
 
 @bot.event
 async def on_ready():
