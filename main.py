@@ -1361,45 +1361,93 @@ async def disciplinary_action(
     action: app_commands.Choice[str],
     notes: str = "None"
 ):
+
+    await interaction.response.defer(ephemeral=True)
+
     if not ia_check(interaction.user):
-        return await interaction.response.send_message("❌ No permission.", ephemeral=True)
+        return await interaction.followup.send(
+            "❌ No permission.",
+            ephemeral=True
+        )
 
     embed = discord.Embed(
         title="⚖️ INTERNAL AFFAIRS — DISCIPLINARY ACTION",
         color=discord.Color.red()
     )
-    embed.add_field(name="🗓 Date Issued", value=f"<t:{int(__import__('datetime').datetime.utcnow().timestamp())}:D>", inline=True)
-    embed.add_field(name="👤 Subject Officer", value=f"{subject.mention} (`{subject}`)", inline=False)
-    embed.add_field(name="❌ Violation", value=violation, inline=False)
-    embed.add_field(name="⚖️ Action Taken", value=action.value, inline=False)
-    embed.add_field(name="📝 Notes", value=notes, inline=False)
-    embed.add_field(name="🕵 Issued By", value=f"{interaction.user.mention} (`{interaction.user}`)", inline=False)
+
+    embed.add_field(
+        name="🗓 Date Issued",
+        value=f"<t:{int(__import__('datetime').datetime.utcnow().timestamp())}:D>",
+        inline=True
+    )
+
+    embed.add_field(
+        name="👤 Subject Officer",
+        value=f"{subject.mention} (`{subject}`)",
+        inline=False
+    )
+
+    embed.add_field(
+        name="❌ Violation",
+        value=violation,
+        inline=False
+    )
+
+    embed.add_field(
+        name="⚖️ Action Taken",
+        value=action.value,
+        inline=False
+    )
+
+    embed.add_field(
+        name="📝 Notes",
+        value=notes,
+        inline=False
+    )
+
+    embed.add_field(
+        name="🕵 Issued By",
+        value=f"{interaction.user.mention} (`{interaction.user}`)",
+        inline=False
+    )
+
     embed.set_footer(text="HRT Internal Affairs • Confidential")
+
     await interaction.channel.send(embed=embed)
 
     try:
         dm_embed = discord.Embed(
             title="⚖️ Disciplinary Action Issued",
             description=(
-                f"You have received a **disciplinary action** in **{interaction.guild.name}**.\n\n"
+                f"You have received a disciplinary action in "
+                f"**{interaction.guild.name}**.\n\n"
                 f"**Action:** {action.value}\n"
                 f"**Violation:** {violation}\n"
                 f"**Notes:** {notes}\n\n"
-                f"This action was issued by Internal Affairs. If you believe this is incorrect, "
+                f"If you believe this is incorrect, "
                 f"please open a High Command ticket."
             ),
             color=discord.Color.red()
         )
-        dm_embed.set_footer(text="HRT Internal Affairs • Confidential")
+
+        dm_embed.set_footer(
+            text="HRT Internal Affairs • Confidential"
+        )
+
         await subject.send(embed=dm_embed)
+
     except discord.Forbidden:
         pass
 
     import datetime
+
     log = load_disciplinary_log()
+
     uid = str(subject.id)
+
     if uid not in log:
         log[uid] = []
+
     log[uid].append({
         "action": action.value,
         "violation": violation,
@@ -1408,9 +1456,22 @@ async def disciplinary_action(
         "issued_by_id": str(interaction.user.id),
         "timestamp": int(datetime.datetime.utcnow().timestamp())
     })
+
+    try:
     save_disciplinary_log(log)
 
-    await interaction.response.send_message("✅ Disciplinary action posted and officer notified.", ephemeral=True)
+    await interaction.followup.send(
+        "✅ Disciplinary action posted and officer notified.",
+        ephemeral=True
+    )
+
+except Exception as e:
+    print(f"[DISCIPLINARY ERROR] {e}")
+
+    await interaction.followup.send(
+        f"❌ Error: {e}",
+        ephemeral=True
+    )
 
 
 @bot.tree.command(name="officer_conduct", description="View disciplinary history for an officer", guild=GUILD)
