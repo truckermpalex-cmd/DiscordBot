@@ -159,18 +159,36 @@ async def update_member_tag(member: discord.Member):
 
 async def update_rank_board(guild: discord.Guild):
     data = load_rank_message()
+
     channel_id = data.get("channel_id")
     message_id = data.get("message_id")
+
     if not channel_id or not message_id:
         return
+
     channel = guild.get_channel(int(channel_id))
+
     if not channel:
+        print("[RANK BOARD] Channel not found.")
         return
+
     try:
         message = await channel.fetch_message(int(message_id))
-        await message.edit(embed=build_rank_embed(guild))
+
+        await message.edit(
+            embed=build_rank_embed(guild)
+        )
+
+        print("[RANK BOARD] Successfully updated.")
+
     except discord.NotFound:
-        save_rank_message({})
+        print("[RANK BOARD] Message deleted manually.")
+
+    except discord.Forbidden:
+        print("[RANK BOARD] Missing permissions.")
+
+    except Exception as e:
+        print(f"[RANK BOARD ERROR] {e}")
 
 intents = discord.Intents.default()
 intents.members = True
@@ -471,6 +489,8 @@ async def on_ready():
         bot.add_view(TicketCloseView())
         synced = await bot.tree.sync(guild=GUILD)
         print(f"Synced {len(synced)} slash commands to guild.")
+        await update_rank_board(bot.get_guild(GUILD_ID))
+        print("[STARTUP] Rank board refreshed.")
     except Exception as e:
         print(e)
 
@@ -480,50 +500,53 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     if before.roles == after.roles:
         return
 
-    added_roles = set(after.roles) - set(before.roles)
-    removed_roles = set(before.roles) - set(after.roles)
-
-    all_rank_role_names = {rn for _display, role_names, _tag in ALL_RANKS for rn in role_names}
+    all_rank_role_names = {
+        rn
+        for _display, role_names, _tag in ALL_RANKS
+        for rn in role_names
+    }
 
     promo_data = load_promotion_order()
+
+    before_rank_roles = {
+        r.name for r in before.roles
+        if r.name in all_rank_role_names
+    }
+
+    after_rank_roles = {
+        r.name for r in after.roles
+        if r.name in all_rank_role_names
+    }
+
+    removed_roles = before_rank_roles - after_rank_roles
+    added_roles = after_rank_roles - before_rank_roles
+
+    uid = str(after.id)
     changed = False
 
-    for role in added_roles:
-        if role.name in all_rank_role_names:
-            order = promo_data.setdefault(role.name, [])
-            uid = str(after.id)
-            if uid not in order:
-                order.append(uid)
-                changed = True
+    # Remove user from old rank lists
+    for role_name in removed_roles:
+        if uid in promo_data.get(role_name, []):
+            promo_data[role_name].remove(uid)
+            changed = True
 
-    for role in removed_roles:
-        if role.name in all_rank_role_names:
-            uid = str(after.id)
-            if uid in promo_data.get(role.name, []):
-                promo_data[role.name].remove(uid)
-                changed = True
+    # Add user to new rank lists
+    for role_name in added_roles:
+        order = promo_data.setdefault(role_name, [])
+
+        if uid not in order:
+            order.append(uid)
+            changed = True
 
     if changed:
         save_promotion_order(promo_data)
 
     await update_member_tag(after)
+
+    # Small delay to let Discord cache update
+    await asyncio.sleep(1)
+
     await update_rank_board(after.guild)
-
-
-@bot.event
-async def on_member_join(member: discord.Member):
-    guild = member.guild
-    info_channel = next(
-        (ch for ch in guild.text_channels if "info" in ch.name.lower()),
-        None
-    )
-    if info_channel:
-        await info_channel.set_permissions(
-            member,
-            read_messages=True,
-            send_messages=False,
-            read_message_history=True
-        )
 
 
 # =========================================================
@@ -837,7 +860,12 @@ async def officer(interaction: discord.Interaction, member: discord.Member):
     if cadet_role and cadet_role in member.roles:
         await member.remove_roles(cadet_role)
     await member.add_roles(officer_role)
+
+    await asyncio.sleep(1)
+
     await update_member_tag(member)
+
+    await update_rank_board(interaction.guild)
     await interaction.response.send_message(f"🚔 {member.mention} has been promoted to **Patrol Officer** by {interaction.user.mention}.")
 
 
@@ -851,9 +879,16 @@ async def promote(interaction: discord.Interaction, member: discord.Member, rank
     if not target_role:
         return await interaction.response.send_message(f"❌ Role for **{rank.name}** not found in this server.", ephemeral=True)
     await clear_rank_roles(member)
+
+    await asyncio.sleep(0.5)
+
     await member.add_roles(target_role)
+
+    await asyncio.sleep(1)
+
     await update_member_tag(member)
-    await interaction.response.send_message(
+
+    await update_rank_board(interaction.guild)
         f"⬆️ {member.mention} has been promoted to **{rank.name}** by {interaction.user.mention}."
     )
 
@@ -868,9 +903,16 @@ async def demote(interaction: discord.Interaction, member: discord.Member, rank:
     if not target_role:
         return await interaction.response.send_message(f"❌ Role for **{rank.name}** not found in this server.", ephemeral=True)
     await clear_rank_roles(member)
+
+    await asyncio.sleep(0.5)
+
     await member.add_roles(target_role)
+
+    await asyncio.sleep(1)
+
     await update_member_tag(member)
-    await interaction.response.send_message(
+
+    await update_rank_board(interaction.guild)
         f"⬇️ {member.mention} has been demoted to **{rank.name}** by {interaction.user.mention}."
     )
 
@@ -881,7 +923,12 @@ async def fire(interaction: discord.Interaction, member: discord.Member, reason:
     if not high_command_check(interaction.user):
         return await interaction.response.send_message("❌ No permission.", ephemeral=True)
     await clear_rank_roles(member)
+
+    await asyncio.sleep(1)
+
     await update_member_tag(member)
+ 
+    await update_rank_board(interaction.guild)
     embed = discord.Embed(
         title="🚫 Member Terminated",
         description=f"{member.mention} has been **fired** from HRT by {interaction.user.mention}.",
@@ -904,10 +951,13 @@ async def retire(interaction: discord.Interaction, member: discord.Member):
     if not high_command_check(interaction.user):
         return await interaction.response.send_message("❌ No permission.", ephemeral=True)
     await clear_rank_roles(member)
+
+    await asyncio.sleep(1)
     retired_role = discord.utils.get(interaction.guild.roles, name="🎖 Retired")
     if retired_role:
         await member.add_roles(retired_role)
     await update_member_tag(member)
+    await update_rank_board(interaction.guild)
     embed = discord.Embed(
         title="🎖 Member Retired",
         description=f"{member.mention} has been **retired** from active duty by {interaction.user.mention}.",
